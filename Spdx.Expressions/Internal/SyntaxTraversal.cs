@@ -3,12 +3,10 @@ using System.Collections.Generic;
 using System.Threading;
 
 namespace Spdx.Expressions.Internal {
-
     // The stack grows with structural depth, never with the length of a flattened operand chain.
     static class SyntaxTraversal {
         internal const int Enter = -1;
         internal const int Exit = int.MaxValue;
-
         internal static IEnumerable<(SpdxExpressionNode Node, int Phase)> Walk(SpdxExpressionNode root, CancellationToken cancellation) {
             var stack = new Stack<(SpdxExpressionNode Node, int Phase)>();
             stack.Push((root, Enter));
@@ -43,5 +41,4 @@ namespace Spdx.Expressions.Internal {
             }
         }
     }
-
 }

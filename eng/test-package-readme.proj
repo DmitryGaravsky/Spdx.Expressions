@@ -1,0 +1,17 @@
+<Project DefaultTargets="VerifyReadmeGenerator">
+  <Import Project="PackageReadme.targets" />
+  <Target Name="VerifyReadmeGenerator">
+    <Error Condition="'$(OutputDirectory)' == ''" Text="A unique OutputDirectory is required." />
+    <WritePackageReadme SourcePath="$(MSBuildThisFileDirectory)readme-fixtures/source.md"
+                        OutputPath="$(OutputDirectory)/README.md"
+                        RepositoryUrl="https://github.com/DmitryGaravsky/Spdx.Expressions"
+                        Revision="0123456789abcdef0123456789abcdef01234567" />
+    <GetFileHash Files="$(OutputDirectory)/README.md">
+      <Output TaskParameter="Hash" PropertyName="ActualHash" />
+    </GetFileHash>
+    <GetFileHash Files="$(MSBuildThisFileDirectory)readme-fixtures/expected.md">
+      <Output TaskParameter="Hash" PropertyName="ExpectedHash" />
+    </GetFileHash>
+    <Error Condition="'$(ActualHash)' != '$(ExpectedHash)'" Text="Package README generator changed a code fence or produced incorrect links." />
+  </Target>
+</Project>

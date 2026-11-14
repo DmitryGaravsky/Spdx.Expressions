@@ -8,7 +8,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Spdx.Expressions {
-
     /// <summary>The list version and exact-byte SHA-256 identities of the paired source files.</summary>
     public sealed class SpdxRegistryIdentity {
         internal SpdxRegistryIdentity(string version, string licenses, string exceptions) {
@@ -54,7 +53,6 @@ namespace Spdx.Expressions {
         static readonly Lazy<SpdxLicenseRegistry> Snapshot = new(Load);
         readonly FrozenDictionary<string, SpdxLicenseInfo> licenses;
         readonly FrozenDictionary<string, SpdxExceptionInfo> exceptions;
-
         SpdxLicenseRegistry(List<SpdxLicenseInfo> licenseEntries, List<SpdxExceptionInfo> exceptionEntries) {
             var orderedLicenses = licenseEntries.OrderBy(x => x.Identifier, StringComparer.Ordinal).ToArray();
             var orderedExceptions = exceptionEntries.OrderBy(x => x.Identifier, StringComparer.Ordinal).ToArray();
@@ -85,7 +83,6 @@ namespace Spdx.Expressions {
             ArgumentNullException.ThrowIfNull(identifier);
             return exceptions.TryGetValue(identifier, out exception);
         }
-
         static SpdxLicenseRegistry Load() {
             try {
                 var licenseEntries = Read("licenses", "licenseId", LicenseHash)
@@ -102,7 +99,6 @@ namespace Spdx.Expressions {
                 throw new InvalidOperationException(CorruptMessage, error);
             }
         }
-
         static List<(string Id, bool Deprecated)> Read(string collection, string idProperty, string expectedHash) {
             byte[] data;
             using(var stream = typeof(SpdxLicenseRegistry).Assembly.GetManifestResourceStream($"Spdx.Expressions.Data.{collection}.json")
@@ -139,5 +135,4 @@ namespace Spdx.Expressions {
             }
         }
     }
-
 }

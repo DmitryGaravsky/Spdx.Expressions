@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
 namespace Spdx.Expressions {
-
     /// <summary>An official-ID candidate occurrence, including repeated occurrences.</summary>
     public sealed class SpdxIdentifierOccurrence {
         internal SpdxIdentifierOccurrence(string identifier, SpdxSourceSpan span, SpdxIdentifierRole role,
@@ -68,5 +67,4 @@ namespace Spdx.Expressions {
         /// <summary>Gets the first MaxDiagnostics messages in source order, with no suppression marker.</summary>
         public IReadOnlyList<SpdxDiagnostic> Diagnostics { get; }
     }
-
 }

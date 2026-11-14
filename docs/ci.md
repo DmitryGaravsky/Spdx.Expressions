@@ -6,16 +6,17 @@ macOS. Feature-branch pushes do not add duplicate PR verification.
 
 Each job installs the SDK declared in global.json using
 [setup-dotnet's global-json-file input](https://github.com/actions/setup-dotnet/blob/main/action.yml)
-and executes the same eng/verify.ps1 pipeline as local development:
+and executes the same eng/verify.ps1 pipeline as local development, including documentation
+links/snippets, documentation fixtures and runnable examples against the packed library:
 
 ```text
-Offline release-script tests ──→ Restore ──→ Debug/Release tests
+Docs + offline script tests ──→ Restore ──→ Debug/Release tests
                                                   │
                                                   ▼
                                       whitespace verification
                                                   │
                                                   ▼
-                           Release nupkg ──→ isolated PackageReference consumer
+                           Release nupkg ──→ isolated consumer + examples
                                                   │
                                                   ▼
                                       retain logs and verified artifacts

@@ -3,8 +3,12 @@
 The repository is [DmitryGaravsky/Spdx.Expressions](https://github.com/DmitryGaravsky/Spdx.Expressions).
 Shared package metadata in Directory.Build.props records this project/repository URL,
 Git repository type, MIT license and author Dmitry Garavsky. The package includes README,
-LICENSE, XML documentation and separate upstream SPDX data/notices. The implementation's
-MIT declaration does not replace the dataset's attribution.
+LICENSE, XML documentation and separate upstream SPDX data/notices. Relative README links
+are expanded to repository URLs during packing; see [Architecture](architecture.md) for
+revision selection. Ensure the referenced revision and documentation are published before
+distributing the package. The real package check verifies the generated README contents.
+The package does not contain the repository guides or runnable example sources.
+The implementation's MIT declaration does not replace the dataset's attribution.
 
 Only the library is packable. Ordinary builds use 0.1.0-dev. The SDK version and
 roll-forward policy are declared in global.json; changing either requires renewed

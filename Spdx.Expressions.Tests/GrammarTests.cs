@@ -3,7 +3,6 @@ using System.Linq;
 using NUnit.Framework;
 
 namespace Spdx.Expressions.Tests {
-
     public class GrammarTests {
         internal static SpdxParsedExpression Parse(string source, SpdxParseOptions? options = null) {
             var result = SpdxExpressionParser.Parse(source, options);
@@ -11,7 +10,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(result.Diagnostics, Is.Empty);
             return result.Expression!;
         }
-
         [TestCase("MIT", "L:MIT")]
         [TestCase("mit", "L:mit")]
         [TestCase("MIT OR Apache-2.0 AND BSD-3-Clause", "O(L:MIT,A(L:Apache-2.0,L:BSD-3-Clause))")]
@@ -46,7 +44,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(expression.SourceText, Is.SameAs(input));
             Assert.That(expression.SyntaxProfile, Is.EqualTo("SPDX-2.3.1"));
         }
-
         // Manually specified diagnostic arbitration and UTF-16 spans, not parser-generated expectations.
         [TestCase("", "EMPTY_INPUT", 0, 0)]
         [TestCase(" \t\r\n", "EMPTY_INPUT", 4, 0)]
@@ -101,7 +98,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(result.Diagnostics[0].Code, Is.EqualTo("SPDX_PARSE_" + code));
             Span(result.Diagnostics[0].Span, start, length);
         }
-
         [Test]
         public void ExactNodeAndComponentSpans() {
             const string input = " \t(DocumentRef-D:LicenseRef-X OR mit+)\r\nAND GPL-2.0+ WITH LLVM-exception ";
@@ -124,7 +120,6 @@ namespace Spdx.Expressions.Tests {
             Span(with.ExceptionSpan, 58, 14);
             Span(((SpdxLicenseExpression)with.Operand).IdentifierSpan, 44, 7);
         }
-
         internal static void Span(SpdxSourceSpan span, int start, int length) {
             Assert.That((span.Start, span.Length), Is.EqualTo((start, length)));
         }
@@ -140,5 +135,4 @@ namespace Spdx.Expressions.Tests {
             };
         }
     }
-
 }

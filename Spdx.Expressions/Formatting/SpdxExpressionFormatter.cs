@@ -4,7 +4,6 @@ using System.Threading;
 using Spdx.Expressions.Internal;
 
 namespace Spdx.Expressions {
-
     /// <summary>Formats spacing while preserving spelling, order, explicit groups and suffixes.</summary>
     public static class SpdxExpressionFormatter {
         const int SourceChunkLength = 1024;
@@ -37,7 +36,6 @@ namespace Spdx.Expressions {
             }
             cancellationToken.ThrowIfCancellationRequested();
             return output.ToString();
-
             void AppendSource(SpdxSourceSpan span) {
                 int remaining = span.Length;
                 int offset = span.Start;
@@ -51,5 +49,4 @@ namespace Spdx.Expressions {
             }
         }
     }
-
 }

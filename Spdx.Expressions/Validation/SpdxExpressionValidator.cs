@@ -4,14 +4,12 @@ using System.Threading;
 using Spdx.Expressions.Internal;
 
 namespace Spdx.Expressions {
-
     /// <summary>Checks identifier namespaces and reports every occurrence without resolving references.</summary>
     public static class SpdxExpressionValidator {
         const string UnknownLicense = "The license identifier is absent from the pinned catalogue.";
         const string UnknownException = "The exception identifier is absent from the pinned catalogue.";
         const string WrongKind = "The identifier belongs only to the other catalogue namespace.";
         const string Deprecated = "The identifier is deprecated in the pinned catalogue; its spelling is preserved.";
-
         /// <summary>Visits the complete AST even after exhausting the diagnostic storage budget.</summary>
         /// <param name="expression">A successfully parsed expression.</param>
         /// <param name="registry">The explicit immutable catalogue to use.</param>
@@ -43,7 +41,6 @@ namespace Spdx.Expressions {
             }
             cancellationToken.ThrowIfCancellationRequested();
             return new(registry.Identity, errors, truncated, identifiers, references, diagnostics);
-
             void Check(string identifier, SpdxSourceSpan span, SpdxIdentifierRole role) {
                 bool licenseFound = registry.TryGetLicense(identifier, out var license);
                 bool exceptionFound = registry.TryGetException(identifier, out var exception);
@@ -68,5 +65,4 @@ namespace Spdx.Expressions {
             }
         }
     }
-
 }

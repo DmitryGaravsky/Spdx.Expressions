@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 
 namespace Spdx.Expressions {
-
     /// <summary>Parses the fixed SPDX-2.3.1 expression profile without consulting a registry.</summary>
     public static class SpdxExpressionParser {
         /// <summary>Parses the entire string, retaining spelling, source ranges, order and explicit groups.</summary>
@@ -32,20 +31,16 @@ namespace Spdx.Expressions {
                 return new(failure.Limit ? SpdxParseStatus.LimitExceeded : SpdxParseStatus.InvalidSyntax, null, failure.Diagnostic);
             }
         }
-
         internal static bool IsIdentifierCharacter(char c) {
             return c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-' or '.';
         }
-
         static bool IsWhitespace(char c) {
             return c is ' ' or '\t' or '\r' or '\n';
         }
-
         // Only deliberate input failures cross this boundary. Programming/process exceptions propagate.
         static InputFailure Failure(string code, SpdxSourceSpan span) {
             return new(code, span);
         }
-
         sealed class InputFailure : Exception {
             internal InputFailure(string code, SpdxSourceSpan span) {
                 Limit = code == "LIMIT_EXCEEDED";
@@ -54,7 +49,6 @@ namespace Spdx.Expressions {
             internal bool Limit { get; }
             internal SpdxDiagnostic Diagnostic { get; }
         }
-
         static class Messages {
             const string Empty = "An expression operand is required.";
             const string Character = "This character is not allowed in the expression profile.";
@@ -82,10 +76,8 @@ namespace Spdx.Expressions {
                 };
             }
         }
-
         enum TokenKind { End, Id, Reference, And, Or, With, Sentinel, Plus, Open, Close }
         readonly record struct Token(TokenKind Kind, SpdxSourceSpan Span, SpdxSourceSpan? Document = null, SpdxSourceSpan? License = null);
-
         sealed class Parser(string text, SpdxParseOptions options, CancellationToken cancellation) {
             const string DocumentReferencePrefix = "DocumentRef-";
             const string LicenseReferencePrefix = "LicenseRef-";
@@ -96,7 +88,6 @@ namespace Spdx.Expressions {
             int nodes;
             int depth;
             Token current;
-
             internal SpdxExpressionNode ParseRoot() {
                 Next();
                 if(current.Kind == TokenKind.End)
@@ -106,7 +97,6 @@ namespace Spdx.Expressions {
                     throw Unexpected(false);
                 return root;
             }
-
             SpdxExpressionNode Disjunction() {
                 var first = Conjunction();
                 if(current.Kind != TokenKind.Or)
@@ -119,7 +109,6 @@ namespace Spdx.Expressions {
                 }
                 return new SpdxOrExpression(operands, Cover(first.Span, operands[^1].Span));
             }
-
             SpdxExpressionNode Conjunction() {
                 var first = Term();
                 if(current.Kind != TokenKind.And)
@@ -132,7 +121,6 @@ namespace Spdx.Expressions {
                 }
                 return new SpdxAndExpression(operands, Cover(first.Span, operands[^1].Span));
             }
-
             SpdxExpressionNode Term() {
                 cancellation.ThrowIfCancellationRequested();
                 var token = current;
@@ -192,7 +180,6 @@ namespace Spdx.Expressions {
                 Next();
                 return new SpdxWithExpression(simple, Slice(exception.Span), exception.Span, Cover(simple.Span, exception.Span));
             }
-
             InputFailure Unexpected(bool operand) {
                 var code = current.Kind switch {
                     TokenKind.Sentinel => "FIELD_SENTINEL",
@@ -203,14 +190,12 @@ namespace Spdx.Expressions {
                 };
                 return Failure(code, current.Span);
             }
-
             void CountNode(SpdxSourceSpan span) {
                 cancellation.ThrowIfCancellationRequested();
                 if(nodes == options.MaxNodes)
                     throw Failure("LIMIT_EXCEEDED", span);
                 nodes++;
             }
-
             void Next() {
                 cancellation.ThrowIfCancellationRequested();
                 while(position < text.Length && IsWhitespace(text[position])) {
@@ -270,7 +255,6 @@ namespace Spdx.Expressions {
                     throw Failure("INVALID_WITH", span);
                 current = new(kind, span);
             }
-
             void ReadReference(int start) {
                 SpdxSourceSpan? document = null;
                 if(Starts(DocumentReferencePrefix)) {
@@ -288,7 +272,6 @@ namespace Spdx.Expressions {
                     throw Failure("INVALID_REFERENCE", new(start, position - start + 1));
                 current = new(TokenKind.Reference, new(start, position - start), document, license);
             }
-
             SpdxSourceSpan Component(int referenceStart) {
                 int start = position;
                 while(position < text.Length && IsIdentifierCharacter(text[position])) {
@@ -301,7 +284,6 @@ namespace Spdx.Expressions {
                     throw Failure("INVALID_REFERENCE", new(referenceStart, position - referenceStart));
                 return new(start, position - start);
             }
-
             bool Starts(string prefix) {
                 return text.AsSpan(position).StartsWith(prefix, StringComparison.Ordinal);
             }
@@ -320,5 +302,4 @@ namespace Spdx.Expressions {
             }
         }
     }
-
 }

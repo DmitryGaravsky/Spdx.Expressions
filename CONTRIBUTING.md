@@ -21,7 +21,10 @@ See [Testing](docs/testing.md) for focused commands and [CI](docs/ci.md) for the
 ## Changes and review
 
 - Keep changes focused; preserve unrelated work. Review the whole diff and affected contracts.
-- Keep public XML/README documentation in English and aligned with actual behavior.
+- Keep public XML and guides in English and aligned with actual behavior.
+- Keep README focused on getting started; put contracts in API, Syntax and Catalogue guides.
+- Update example source regions and their matching Usage/README blocks and expected output
+  together. Run `./eng/check-docs.ps1`; the full pipeline runs examples against the package.
 - Use independent grammar, AST, span and resource fixtures. Do not mirror production algorithms.
 - Preserve exact upstream JSON/notice bytes and provenance; do not run formatters over Data.
 - Verify appropriately while iterating. Do not run a full baseline at every task start.
@@ -33,7 +36,8 @@ See [Testing](docs/testing.md) for focused commands and [CI](docs/ci.md) for the
 
 Use .editorconfig and .gitattributes for explicit usings, block-scoped namespaces, brace
 placement, UTF-8 and LF. Diagrams use UTF text, not Mermaid. See AGENTS.md for the manual
-conventions beyond dotnet format whitespace.
+conventions beyond dotnet format whitespace, including compact namespace/type/method bodies
+and concise single-line comments where logical blocks need explanation.
 
 The implementation uses the [MIT license](LICENSE), copyright Dmitry Garavsky.
 The embedded SPDX dataset has separate [upstream notices](THIRD-PARTY-NOTICES.md).

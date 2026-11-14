@@ -4,7 +4,6 @@ using System.Linq;
 using NUnit.Framework;
 
 namespace Spdx.Expressions.Tests {
-
     public class FormattingTests {
         [TestCase(" mit  OR Apache-2.0 ", "mit OR Apache-2.0")]
         [TestCase("( MIT ) AND MIT", "(MIT) AND MIT")]
@@ -18,7 +17,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(SpdxExpressionFormatter.Format(expression), Is.EqualTo(expected));
             Roundtrip(expression);
         }
-
         [Test]
         public void GeneratedRoundtripsAndIdempotence() {
             string[] atoms = ["MIT", "mit", "Unknown-1.0", "GPL-2.0+", "LicenseRef-X", "DocumentRef-D:LicenseRef-X", "MIT WITH LLVM-exception"];
@@ -30,7 +28,6 @@ namespace Spdx.Expressions.Tests {
                             Roundtrip(GrammarTests.Parse(input));
                         }
         }
-
         [Test]
         public void FormattingCanRequireLargerInputBudget() {
             var expression = GrammarTests.Parse("(A)OR(B)", new() { MaxInputLength = 8 });
@@ -39,7 +36,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(SpdxExpressionParser.Parse(output, new() { MaxInputLength = 8 }).Status, Is.EqualTo(SpdxParseStatus.LimitExceeded));
             Roundtrip(expression);
         }
-
         [Test]
         public void DeterministicMutationSet() {
             // Fixed LCG, seed 231, 600 single insert/delete/replace mutations. External watchdog: eng/verify.ps1.
@@ -83,14 +79,12 @@ namespace Spdx.Expressions.Tests {
             Assert.That(exercisedSeedOperations.Count, Is.EqualTo(seeds.Length * 3), "Every seed must exercise insertion, deletion and replacement.");
             Assert.That(exercisedCharacters, Is.EquivalentTo(alphabet), "Include plus, NUL and surrogate mutations.");
             Assert.That(endInsertions, Is.Positive, "Exercise full-consumption failures at EOF.");
-
             int Next(int max) {
                 state = unchecked(state * 1664525 + 1013904223);
                 // The low bits cycle in step with the number of draws per case.
                 return (int)((state >> 16) % (uint)max);
             }
         }
-
         static void Roundtrip(SpdxParsedExpression expression) {
             string formatted = SpdxExpressionFormatter.Format(expression);
             var reparsed = GrammarTests.Parse(formatted);
@@ -98,7 +92,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(SpdxExpressionFormatter.Format(reparsed), Is.EqualTo(formatted));
             CheckSpans(expression.Root, expression.SourceText);
         }
-
         static void CheckSpans(SpdxExpressionNode node, string source) {
             Assert.That(node.Span.Start, Is.GreaterThanOrEqualTo(0));
             Assert.That(node.Span.Length, Is.Positive);
@@ -132,5 +125,4 @@ namespace Spdx.Expressions.Tests {
             }
         }
     }
-
 }

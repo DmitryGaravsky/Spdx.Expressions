@@ -11,7 +11,6 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 
 namespace Spdx.Expressions.Tests {
-
     public class RegistryTests {
         [TestCase("licenses", "licenseId", 740, "47d1cc681abe31166b342b6cc4aab13a6ba8ea5c48794697fe3bf8b1dbaf509a")]
         [TestCase("exceptions", "licenseExceptionId", 86, "59ee7c150de521d635cbf9367b8cf543b8da6781ea3ac1c073d305524f84ada2")]
@@ -61,7 +60,6 @@ namespace Spdx.Expressions.Tests {
                 }
             }
         }
-
         [Test]
         public void NoMutablePublicGraphOrCollections() {
             var parse = SpdxExpressionParser.Parse("(MIT OR MIT) AND LicenseRef-X");
@@ -81,7 +79,6 @@ namespace Spdx.Expressions.Tests {
             foreach(var type in assembly.GetExportedTypes().Where(x => !x.Name.EndsWith("Options", StringComparison.Ordinal)))
                 Assert.That(type.GetProperties().Where(x => x.SetMethod?.IsPublic == true), Is.Empty, type.FullName);
         }
-
         [TestCase("")]
         [TestCase("tr-TR")]
         public void ConcurrentCultureIndependentOperations(string cultureName) {
@@ -103,5 +100,4 @@ namespace Spdx.Expressions.Tests {
             });
         }
     }
-
 }

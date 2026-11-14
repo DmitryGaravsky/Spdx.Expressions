@@ -36,7 +36,11 @@ verification outputs remain ignored; preserve historical evidence.
 
 | Task | Document |
 | --- | --- |
-| Current functionality, API, syntax, limits and catalogue | [README](README.md) |
+| Package overview and getting started | [README](README.md) |
+| Runnable examples and local package setup | [Usage](docs/usage.md) |
+| Operations, models and result contracts | [API](docs/api.md) |
+| Syntax, diagnostics and limits | [Syntax](docs/syntax.md) |
+| Embedded data and identity | [Catalogue](docs/catalogue.md) |
 | Source organization and invariants | [Architecture](docs/architecture.md) |
 | Contribution workflow | [Contributing](CONTRIBUTING.md) |
 | Verification and package checks | [Testing](docs/testing.md) |
@@ -93,6 +97,10 @@ configured workflows do not prove that features work or hosted checks have passe
 - Use narrow visibility, omit private when it is the default and make stateless helpers static.
 - Use block-bodied methods/constructors. Keep bodies on separate lines, including one-statement
   helpers and test doubles. Only simple property accessors stay compact.
+- Do not put blank lines inside namespace, type or method bodies, including between types,
+  before/after classes or structs, between members and around local functions. Apply this
+  to library code, tests and examples. Where logical blocks need separation, use a concise
+  single-line comment explaining the block; do not add decorative separator comments.
 - Put if/loop bodies on the next line. Short closing else/finally clauses may stay compact when
   readable. Keep return, continue, break and throw on separate lines.
 - Name intermediate results instead of nesting parsing, snapshots and result construction.

@@ -8,8 +8,9 @@
 
 Restore uses repository NuGet.Config. An optional `-RestoreSource <local-feed>` selects
 an explicit local development feed for offline environments with the pinned dependencies.
-Offline release-script tests run first. Debug and Release tests run under external process-tree watchdogs. Whitespace must already
-match .editorconfig; verification reports formatting changes rather than applying them.
+Documentation checks and offline release-script tests run first. Restore and test builds
+use one MSBuild node. Debug and Release tests run under external process-tree watchdogs.
+Whitespace must already match .editorconfig; verification reports changes rather than applying them.
 The final Release nupkg is tested through a PackageReference consumer outside the solution
 with isolated package/HTTP/CLI caches and a local-only feed. SDK first-run PATH updates
 are explicitly disabled; a successful consumer check also requires unchanged user and
@@ -26,6 +27,8 @@ select a new evidence directory; an existing directory is rejected.
 ## Focused checks
 
 ```powershell
+./eng/check-docs.ps1
+./eng/test-docs.ps1
 dotnet restore Spdx.Expressions.slnx --configfile NuGet.Config
 dotnet build Spdx.Expressions.slnx -c Release --no-restore
 dotnet test Spdx.Expressions.Tests/Spdx.Expressions.Tests.csproj -c Release --no-build --no-restore --filter GrammarTests
@@ -51,6 +54,37 @@ seed, every mutation character (including NUL and a surrogate), and insertion at
 
 Preserve the exact package/hash and failed evidence when changing a candidate.
 A prepared workflow/script is not proof of a passing Windows/Linux/macOS run.
+
+## Documentation and runnable examples
+
+`eng/check-docs.ps1` validates authored inline Markdown links, exact file casing and heading
+anchors in root documents and docs/*.md. It excludes fenced code, external URLs and verbatim
+upstream notices. This is a check of the repository's Markdown conventions, not a general
+Markdown renderer or external-link availability check.
+
+Each `example` marker in README/Usage pairs a complete C# program with expected text output.
+The checker requires a one-to-one match with named source regions in
+Spdx.Expressions.Examples/Program.cs. Edit both deliberately; expected output is not generated
+from the running library. `eng/test-docs.ps1` uses isolated fixtures to reject missing files,
+wrong path casing, missing anchors, altered snippets, unpaired example markers/programs,
+missing expected output, relative package links, mismatched repository commits and unintended
+package README changes. Rejection fixtures check the failure reason so unrelated exceptions
+cannot count as successful rejection. Failed fixture runs retain a result.json too.
+The MSBuild readme-generator fixture checks exact output, including unchanged fenced code,
+external links, a nested status badge and anchor links.
+
+The full pipeline builds the examples project and includes it in whitespace checks. After
+packing, the smoke driver copies its source into an isolated PackageReference project, builds
+it against the exact local nupkg, runs every documented scenario under a process timeout and
+compares stdout with the expected blocks and requires empty stderr. It also compiles and
+executes each documented C# block as a separate console program; helpers or using directives
+in the example runner cannot mask incomplete snippets. The same driver checks the package
+README preserves all prose and expands repository-relative links to the nuspec commit. No ProjectReference or internal API is used
+for these package runs. Fresh SDK homes, local-only feeds and PATH checks cover them too.
+
+Documentation logs and fixture results are retained with each verification run. To check an
+existing package README alone, use `./eng/check-docs.ps1 -Package <path-to-nupkg>`. To execute
+the examples against it, use `./eng/package-smoke.ps1 -Package <path-to-nupkg>`.
 
 ## Release automation checks
 
@@ -111,10 +145,14 @@ As of 2026-11-14, local Windows checks with SDK 10.0.404 selected by global.json
 | Debug NUnit | 127 passed, 0 failed, 0 skipped |
 | Release NUnit | 127 passed, 0 failed, 0 skipped |
 | Solution and consumer formatting | Passed |
-| Development and tag-version packages with external PackageReference consumers | Passed (0.1.0-dev and 0.1.0-preview.2) |
+| Documentation links and source blocks | 68 relative links and 11 example programs passed |
+| Documentation checker fixtures | 21 scenarios passed |
+| Documented example output against the development nupkg | 11 scenarios and 11 standalone programs passed |
+| Local package setup commands and standalone quick-start program | Passed with a fresh application and package cache |
+| Development package with external PackageReference consumers | Passed (0.1.0-dev) |
 | Offline release scripts | 24 scenarios passed; mocked GitHub CLI, no publication |
-| Release preparation and SHA256SUMS validation | Passed; existing output rejected without changes |
-| Build/release workflow static validation | Passed with actionlint 1.7.12 |
+| Tag-version release preparation | Not rerun for this update |
+| Build/release workflow actionlint validation | Not rerun for this update |
 | Fresh CLI homes and required SDK environment guards | Passed |
 | User/machine PATH raw registry values and kinds | Unchanged |
 | Linux/macOS and GitHub-hosted CI | Not executed; unverified |

@@ -69,6 +69,8 @@ jobs:
             artifacts/verification/*/path-state.json
             artifacts/verification/*/test-results/**
             artifacts/verification/*/checks/**
+            artifacts/verification/*/*documentation.log
+            artifacts/verification/*/documentation-tests/result.json
             artifacts/verification/*/release-tests/result.json
             artifacts/verification/*/package-smoke/**
           if-no-files-found: warn

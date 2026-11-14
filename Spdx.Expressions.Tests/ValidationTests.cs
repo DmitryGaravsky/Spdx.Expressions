@@ -3,7 +3,6 @@ using System.Linq;
 using NUnit.Framework;
 
 namespace Spdx.Expressions.Tests {
-
     public class ValidationTests {
         [TestCase("mit", false, false, "Known", "MIT")]
         [TestCase("Unknown-1.0", true, false, "Unknown", null)]
@@ -25,7 +24,6 @@ namespace Spdx.Expressions.Tests {
                 Assert.That(occurrence.IsDeprecated, Is.Null);
             }
         }
-
         [TestCase(1, true)]
         [TestCase(2, true)]
         [TestCase(3, false)]
@@ -44,7 +42,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(result.Diagnostics[0].Severity, Is.EqualTo(SpdxDiagnosticSeverity.Warning));
             Assert.That(result.Diagnostics[0].Code, Is.EqualTo("SPDX_ID_DEPRECATED"));
         }
-
         [TestCase("Unknown", "SPDX_ID_UNKNOWN_LICENSE")]
         [TestCase("MIT WITH Unknown", "SPDX_ID_UNKNOWN_EXCEPTION")]
         [TestCase("MIT WITH Apache-2.0", "SPDX_ID_WRONG_KIND")]
@@ -53,7 +50,6 @@ namespace Spdx.Expressions.Tests {
             var result = SpdxExpressionValidator.Validate(GrammarTests.Parse(text), SpdxLicenseRegistry.Default);
             Assert.That(result.Diagnostics.Single().Code, Is.EqualTo(code));
         }
-
         [Test]
         public void MixedOccurrencesAreInSourceOrderAndUseExpectedNamespaces() {
             var result = SpdxExpressionValidator.Validate(GrammarTests.Parse("mit WITH llvm-exception OR DocumentRef-D:LicenseRef-X WITH LLVM-exception OR MIT"), SpdxLicenseRegistry.Default);
@@ -64,5 +60,4 @@ namespace Spdx.Expressions.Tests {
             Assert.That(result.IdentifierOccurrences.Select(x => x.Span.Start), Is.Ordered);
         }
     }
-
 }

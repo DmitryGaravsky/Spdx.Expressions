@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
 namespace Spdx.Expressions {
-
     /// <summary>A zero-based range measured in UTF-16 code units.</summary>
     public readonly struct SpdxSourceSpan {
         internal SpdxSourceSpan(int start, int length) {
@@ -15,7 +14,6 @@ namespace Spdx.Expressions {
         /// <summary>Gets the length; EOF diagnostics may have zero length.</summary>
         public int Length { get; }
     }
-
     /// <summary>The result of syntactic parsing, independent of the registry.</summary>
     public enum SpdxParseStatus {
         /// <summary>A complete expression was parsed.</summary>
@@ -63,7 +61,6 @@ namespace Spdx.Expressions {
         /// <summary>Present only in the other namespace.</summary>
         WrongKind
     }
-
     /// <summary>A stable diagnostic code and source range with a human-readable English message.</summary>
     public sealed class SpdxDiagnostic {
         internal SpdxDiagnostic(string code, SpdxDiagnosticSeverity severity, SpdxSourceSpan span, string message) {
@@ -81,7 +78,6 @@ namespace Spdx.Expressions {
         /// <summary>Gets explanatory text, which is not a machine contract.</summary>
         public string Message { get; }
     }
-
     /// <summary>Inclusive parser budgets. No maximum-sized buffers are allocated from these settings.</summary>
     public sealed class SpdxParseOptions {
         /// <summary>Maximum input UTF-16 units, including whitespace. Default 65,536.</summary>
@@ -94,7 +90,6 @@ namespace Spdx.Expressions {
         public int MaxNodes { get; init; } = 8_192;
         /// <summary>Maximum concurrently open parentheses, from 1 through 256. Default 64.</summary>
         public int MaxParenthesisDepth { get; init; } = 64;
-
         internal void Check() {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(MaxInputLength);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(MaxIdentifierLength);
@@ -133,7 +128,7 @@ namespace Spdx.Expressions {
         public string SourceText { get; }
         /// <summary>Gets the root; its span excludes outer whitespace.</summary>
         public SpdxExpressionNode Root { get; }
-        /// <summary>Gets SPDX-2.3.1; the README documents the fixed lexical policies.</summary>
+        /// <summary>Gets SPDX-2.3.1; the syntax reference documents the fixed lexical policies.</summary>
         public string SyntaxProfile => "SPDX-2.3.1";
     }
     /// <summary>A source-preserving immutable node. Construction and inheritance are controlled by the parser.</summary>
@@ -219,5 +214,4 @@ namespace Spdx.Expressions {
         /// <summary>Gets the expression inside the parentheses.</summary>
         public SpdxExpressionNode Inner { get; }
     }
-
 }

@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . "$PSScriptRoot/Invoke-Checked.ps1"
 . "$PSScriptRoot/PathState.ps1"
+. "$PSScriptRoot/Documentation.ps1"
 $packagePath = (Resolve-Path -LiteralPath $Package).Path
 $packageHash = (Get-FileHash -LiteralPath $packagePath).Hash.ToLowerInvariant()
 $archive = [IO.Compression.ZipFile]::OpenRead($packagePath)
@@ -68,6 +69,36 @@ try {
     Invoke-Checked -Arguments @('restore', 'Consumer.csproj', '--configfile', "$workspace/NuGet.Config", '--no-http-cache', '-p:NuGetAudit=false') -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/restore"
     Invoke-Checked -Arguments @('build', 'Consumer.csproj', '-c', 'Release', '--no-restore', '-m:1') -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/build"
     Invoke-Checked -Arguments @('bin/Release/net10.0/Consumer.dll', $copiedPackage) -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/run" -TimeoutSeconds 30
+    Test-PackageReadme -Root $root -Package $copiedPackage
+    Test-DocumentExamples -Root $root
+    [IO.Directory]::CreateDirectory("$workspace/examples") | Out-Null
+    Copy-Item -LiteralPath "$root/Spdx.Expressions.Examples/Program.cs" -Destination "$workspace/examples/Program.cs"
+    Copy-Item -LiteralPath "$workspace/project/Consumer.csproj" -Destination "$workspace/examples/Examples.csproj"
+    Invoke-Checked -Arguments @('restore', 'Examples.csproj', '--configfile', "$workspace/NuGet.Config", '--no-http-cache', '-p:NuGetAudit=false') -WorkingDirectory "$workspace/examples" -Environment $environment -LogBase "$output/examples-restore"
+    Invoke-Checked -Arguments @('build', 'Examples.csproj', '-c', 'Release', '--no-restore', '-m:1') -WorkingDirectory "$workspace/examples" -Environment $environment -LogBase "$output/examples-build"
+    $examples = @(Get-DocumentExamples $root)
+    foreach ($example in $examples) {
+        $log = "$output/example-$($example.Name)"
+        Invoke-Checked -Arguments @('bin/Release/net10.0/Examples.dll', $example.Name) -WorkingDirectory "$workspace/examples" -Environment $environment -LogBase $log -TimeoutSeconds 30
+        $actual = [IO.File]::ReadAllText("$log.stdout.log").Replace("`r`n", "`n")
+        $errorOutput = [IO.File]::ReadAllText("$log.stderr.log")
+        Test-ExampleOutput -Example $example -Output $actual -ErrorOutput $errorOutput
+    }
+    $result.examplesPassed = $examples.Count
+    # Compile each documented program alone so helpers/usings in the example runner cannot hide omissions.
+    [IO.Directory]::CreateDirectory("$workspace/snippet") | Out-Null
+    Copy-Item -LiteralPath "$workspace/project/Consumer.csproj" -Destination "$workspace/snippet/Snippet.csproj"
+    Invoke-Checked -Arguments @('restore', 'Snippet.csproj', '--configfile', "$workspace/NuGet.Config", '--no-http-cache', '-p:NuGetAudit=false') -WorkingDirectory "$workspace/snippet" -Environment $environment -LogBase "$output/snippet-restore"
+    foreach ($example in $examples) {
+        [IO.File]::WriteAllText("$workspace/snippet/Program.cs", $example.Code)
+        $log = "$output/snippet-$($example.Name)"
+        Invoke-Checked -Arguments @('build', 'Snippet.csproj', '-c', 'Release', '--no-restore', '-m:1') -WorkingDirectory "$workspace/snippet" -Environment $environment -LogBase "$log-build"
+        Invoke-Checked -Arguments @('bin/Release/net10.0/Snippet.dll') -WorkingDirectory "$workspace/snippet" -Environment $environment -LogBase "$log-run" -TimeoutSeconds 30
+        $actual = [IO.File]::ReadAllText("$log-run.stdout.log")
+        $errorOutput = [IO.File]::ReadAllText("$log-run.stderr.log")
+        Test-ExampleOutput -Example $example -Output $actual -ErrorOutput $errorOutput
+    }
+    $result.standaloneSnippetsPassed = $examples.Count
     if ((Get-FileHash -LiteralPath $packagePath).Hash.ToLowerInvariant() -ne $packageHash) { throw 'Original package changed during verification.' }
     $result.passed = $true
     $result.status = 'Passed'

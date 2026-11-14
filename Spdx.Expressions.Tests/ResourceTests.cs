@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 
 namespace Spdx.Expressions.Tests {
-
     public class ResourceTests {
         [TestCase("input", "MIT ", 0, 4)]
         [TestCase("identifier", "ABCD", 0, 4)]
@@ -26,7 +25,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(result.Status, Is.EqualTo(SpdxParseStatus.LimitExceeded));
             GrammarTests.Span(result.Diagnostics.Single().Span, start, length);
         }
-
         [TestCase("input", "MIT", "MIT ")]
         [TestCase("identifier", "ABC", "ABCD")]
         [TestCase("tokens", "(A)", "(A)+")]
@@ -44,7 +42,6 @@ namespace Spdx.Expressions.Tests {
             GrammarTests.Parse(boundary, options);
             AssertLimit(over, options);
         }
-
         [Test]
         public void TokenAndNodeAccounting() {
             GrammarTests.Parse("DocumentRef-D:LicenseRef-X", new() { MaxTokens = 1, MaxNodes = 1, MaxIdentifierLength = 1 });
@@ -60,7 +57,6 @@ namespace Spdx.Expressions.Tests {
             AssertLimit("DocumentRef-X:LicenseRef-ABCD", new() { MaxIdentifierLength = 3 });
             GrammarTests.Parse("MIT", new() { MaxInputLength = int.MaxValue, MaxTokens = int.MaxValue, MaxNodes = int.MaxValue, MaxIdentifierLength = int.MaxValue });
         }
-
         [Test]
         public void DefaultLimitsAndMaximumDepth() {
             GrammarTests.Parse(new string(' ', 65_533) + "MIT");
@@ -79,7 +75,6 @@ namespace Spdx.Expressions.Tests {
             GrammarTests.Parse(tokens + "+", new() { MaxNodes = 20_000 }); // 16,384 tokens.
             AssertLimit("(" + tokens + ")", new() { MaxNodes = 20_000 }); // 16,385 tokens.
         }
-
         [Test]
         public void LargeFlatChainsDoNotUseOperandRecursion() {
             string input = string.Join(" OR ", Enumerable.Repeat("MIT", 30_000));
@@ -88,7 +83,6 @@ namespace Spdx.Expressions.Tests {
             Assert.That(SpdxExpressionFormatter.Format(expression), Is.EqualTo(input));
             Assert.That(SpdxExpressionValidator.Validate(expression, SpdxLicenseRegistry.Default).IdentifierOccurrences.Count, Is.EqualTo(30_000));
         }
-
         [Test]
         public void NullAndInvalidOptionsAreArgumentExceptions() {
             var expression = GrammarTests.Parse("MIT");
@@ -107,7 +101,6 @@ namespace Spdx.Expressions.Tests {
             Assert.Throws<ArgumentOutOfRangeException>(() => SpdxExpressionParser.Parse("MIT", new() { MaxParenthesisDepth = 257 }));
             Assert.Throws<ArgumentOutOfRangeException>(() => SpdxExpressionParser.Parse("MIT", new() { MaxParenthesisDepth = int.MaxValue }));
         }
-
         [Test]
         public void PreCancelledOperationsThrowWithoutResults() {
             var token = new CancellationToken(true);
@@ -116,7 +109,6 @@ namespace Spdx.Expressions.Tests {
             Assert.Throws<OperationCanceledException>(() => SpdxExpressionValidator.Validate(expression, SpdxLicenseRegistry.Default, cancellationToken: token));
             Assert.Throws<OperationCanceledException>(() => SpdxExpressionFormatter.Format(expression, token));
         }
-
         [TestCase(false)]
         [TestCase(true)]
         public void CancellationDuringLongScans(bool candidate) {
@@ -124,7 +116,6 @@ namespace Spdx.Expressions.Tests {
             AssertCancellation(token => SpdxExpressionParser.Parse(input,
                 new() { MaxInputLength = input.Length, MaxIdentifierLength = input.Length }, token));
         }
-
         [TestCase(false)]
         [TestCase(true)]
         public void CancellationDuringTraversal(bool format) {
@@ -134,7 +125,6 @@ namespace Spdx.Expressions.Tests {
             AssertCancellation(token => format ? SpdxExpressionFormatter.Format(expression, token) :
                 (object)SpdxExpressionValidator.Validate(expression, registry, new() { MaxDiagnostics = 1 }, token));
         }
-
         static void AssertCancellation(Func<CancellationToken, object> operation) {
             // Do not use Thread.Sleep: Windows timer granularity can let the entire operation finish.
             // Retry only a completed-before-cancel scheduling race, never an observed cancellation failure.
@@ -163,7 +153,6 @@ namespace Spdx.Expressions.Tests {
             }
             Assert.Fail("Unable to overlap cancellation with the operation in three bounded attempts.");
         }
-
         static void AssertLimit(string input, SpdxParseOptions options) {
             var result = SpdxExpressionParser.Parse(input, options);
             Assert.That(result.Status, Is.EqualTo(SpdxParseStatus.LimitExceeded));
@@ -172,5 +161,4 @@ namespace Spdx.Expressions.Tests {
             Assert.That(result.Diagnostics[0].Span.Start + (long)result.Diagnostics[0].Span.Length, Is.LessThanOrEqualTo(input.Length));
         }
     }
-
 }
