@@ -17,7 +17,8 @@ Policies are fixed, with no permissive mode:
 - ID candidates and reference components contain one or more ASCII letters, digits,
   hyphens or dots. Unknown candidates can parse successfully.
 - Reference prefixes require exact casing. `licenseref-X` is an ordinary ID candidate;
-  malformed recognized prefixes fail. Component spelling is retained.
+  malformed recognized prefixes fail. Component spelling is retained. References are
+  contiguous tokens: whitespace inside a reference, including around its colon, is rejected.
 - AND/OR require whitespace or parentheses at both boundaries. WITH requires
   whitespace on both sides and attaches only to a license or reference, never a group.
 - One adjacent plus is allowed on a license candidate, never a reference or exception.
@@ -28,6 +29,9 @@ Policies are fixed, with no permissive mode:
   NUL, Unicode lookalikes, repeated WITH and trailing prose are rejected.
 
 For AST and UTF-16 span contracts, see [source evidence](api.md#source-evidence-and-ast).
+The [conformance coverage map](testing.md#specification-conformance) distinguishes Annex D
+requirements from these fixed profile policies. The single-line restriction in Annex D.1
+applies to tag:value documents; this expression API accepts the whitespace listed above.
 
 ## Diagnostic codes
 
@@ -51,6 +55,8 @@ Stable diagnostic codes (English message wording is not a machine contract):
 | SPDX_ID_DEPRECATED | Known deprecated ID |
 
 Parser diagnostics use original UTF-16 spans; EOF can have length zero.
+An invalid supplementary Unicode character is reported at its first UTF-16 code unit,
+with length one. Parsing stops with one diagnostic and no partial AST or later evidence.
 The scanner classifies the next token before the parser checks its grammatical role.
 Invalid characters or token budgets discovered during that lookahead can therefore
 take precedence over a missing-operator error. Specific arbitration cases are frozen

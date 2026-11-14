@@ -55,6 +55,56 @@ seed, every mutation character (including NUL and a surrogate), and insertion at
 Preserve the exact package/hash and failed evidence when changing a candidate.
 A prepared workflow/script is not proof of a passing Windows/Linux/macOS run.
 
+## Specification conformance
+
+The project-maintained corpus in [ConformanceTests](../Spdx.Expressions.Tests/ConformanceTests.cs)
+uses [SPDX 2.3.1 Annex D](https://spdx.github.io/spdx-spec/v2.3.1/SPDX-license-expressions/)
+and the [fixed syntax profile](syntax.md). It is not an official SPDX certification suite.
+Named cases carry Source or Profile metadata; inputs, expected trees, formatting and
+diagnostic coordinates are literal fixtures, not captured parser output. The shared tree
+description helper only observes the AST. Roundtrip/idempotence checks supplement these
+independent expectations; they cannot establish conformance on their own.
+
+The corpus includes 14 expression examples from D.3 through D.4.5, plus derived combinations
+and counterexamples. Catalogue-sensitive examples explicitly use Default version 3.29.0;
+RegistryTests independently pins its exact source hashes and verifies every imported entry.
+Existing fixtures remain the authority for already covered boundaries:
+
+| Rule or policy | Positive and negative evidence |
+| --- | --- |
+| D.1/D.3 simple licenses and adjacent plus | ConformanceTests.SimpleExamples; GrammarTests.IndependentFailures rejects separated/repeated plus and suffixes on references/exceptions; DerivedGrammarFailures adds tab separation and grouped suffixes. |
+| D.1 reference components | SimpleExamples, IdentifierAndKeywordBoundaries and GrammarTests.IndependentStructures cover local/document references, punctuation and reserved words inside components; ReferenceBoundaries and IndependentFailures cover empty/malformed components and prefixes. |
+| D.1 operator boundaries and complete consumption | IndependentStructures accepts parentheses as AND/OR separators; IndependentFailures covers WITH spacing, comments, declarations and trailing prose; DerivedGrammarFailures adds missing/repeated OR, adjacent groups and mixed missing operands. |
+| D.2 operator case | OperatorsAreCaseSensitive and IndependentFailures reject lowercase/mixed-case operators; uppercase operators appear in every successful composite fixture. |
+| D.2 identifier case | D2_CatalogueMatchingPreservesOriginalEvidence checks mixed license/exception case, canonical lookup and original spans; RegistryTests.ConcurrentCultureIndependentOperations covers culture/concurrency. |
+| D.4.2/D.4.3 binary operators and source order | DisjunctionExamples and ConjunctionExamples cover both orders and three operands; IndependentStructures preserves duplicates and explicit groups; DerivedStructures covers grouped OR chains. |
+| D.4.4 WITH operand kinds | D44_ExceptionExample and IndependentStructures cover license, plus and reference operands; IndependentFailures/DerivedGrammarFailures reject repeated WITH, grouped left operands, grouped exceptions and reference exceptions. |
+| D.4.5 precedence | PrecedenceExamples checks the published pair; DerivedStructures combines all four precedence levels, conjunctions on both sides of OR and group overrides. |
+| Profile: reference casing and colon adjacency | IndependentStructures treats lowercase prefixes as ordinary candidates; IndependentFailures rejects malformed recognized prefixes; ReferenceBoundaries rejects space/tab around the colon. |
+| Profile: whitespace, Unicode and UTF-16 evidence | Profile_WhitespaceDoesNotApplyTagValueLineRestrictions accepts space/TAB/CR/LF; InvalidCharactersStopBeforeLaterEvidence rejects other whitespace and surrogate pairs; IndependentFailures covers NBSP/NUL/lone surrogates; ExactNodeAndComponentSpans pins node/component coordinates and failure cases pin EOF. |
+| Profile: document sentinels and whole tokens | FieldSentinelsAreNotExpressions and IndependentFailures reject NONE/NOASSERTION in ID positions; IndependentStructures accepts lowercase candidates/reference components; IdentifierAndKeywordBoundaries accepts longer identifiers containing keywords. |
+| Profile: parsing versus catalogue validation | Profile_IdentifierCandidatesDoNotRequireCatalogueMembership accepts unknown syntax then checks unknown license/exception diagnostics and unresolved references; ValidationTests covers known/unknown/wrong-kind/deprecated IDs, occurrence order and independent truncation flags. |
+| Profile: source-preserving formatting | FormattingTests.IndependentGoldenOutputs and Profile_WhitespaceDoesNotApplyTagValueLineRestrictions specify literal outputs; examples and DerivedStructures preserve casing, plus, groups and order. |
+| Profile: budgets and cancellation | ResourceTests covers inclusive limits, exact limit spans, long chains and cancellation during scanning/traversal; these are engineering contracts, not Annex D rules. |
+
+Interpretation boundaries are deliberate:
+
+- Annex D's license/exception productions refer to catalogue membership. Parse recognizes
+  candidates; Validate performs the separate membership check. Parse success alone does
+  not establish a valid SPDX document or resolve a LicenseRef.
+- ASCII whitespace, exact reference prefix casing, contiguous reference tokens and reserved
+  field sentinels are explicit profile choices. Diagnostic codes, UTF-16 coordinates and
+  first-error arbitration are library contracts, not requirements imposed by Annex D.
+- D.1's tag:value single-line restriction belongs to document serialization. D.4.6 RDF
+  representation and reference resolution are outside this API and have no executable fixtures.
+- D.4.2/D.4.3 commutativity does not require sorting the source-preserving AST. Semantic
+  equivalence, license compatibility and legal conclusions are outside these tests.
+
+The real PackageReference consumer checks a representative precedence and rejection subset
+against the exact nupkg. This bounded corpus is neither an exhaustive proof nor a comparison
+with other parsers. Hosted verification must run on the actual candidate independently of
+local results.
+
 ## Documentation and runnable examples
 
 `eng/check-docs.ps1` validates authored inline Markdown links, exact file casing and heading
@@ -142,21 +192,21 @@ As of 2026-11-14, local Windows checks with SDK 10.0.404 selected by global.json
 | Check | Result |
 | --- | --- |
 | Debug and Release compilation | Passed; zero warnings and errors |
-| Debug NUnit | 127 passed, 0 failed, 0 skipped |
-| Release NUnit | 127 passed, 0 failed, 0 skipped |
+| Debug NUnit | 179 passed, 0 failed, 0 skipped; includes 52 conformance cases |
+| Release NUnit | 179 passed, 0 failed, 0 skipped; includes 52 conformance cases |
 | Solution and consumer formatting | Passed |
-| Documentation links and source blocks | 68 relative links and 11 example programs passed |
+| Documentation links and source blocks | 73 relative links and 11 example programs passed |
 | Documentation checker fixtures | 21 scenarios passed |
 | Documented example output against the development nupkg | 11 scenarios and 11 standalone programs passed |
-| Local package setup commands and standalone quick-start program | Passed with a fresh application and package cache |
+| Local package setup commands and standalone quick-start program | Previously passed with a fresh application and package cache; manual setup not rerun for conformance changes |
 | Development package with external PackageReference consumers | Passed (0.1.0-dev) |
 | Offline release scripts | 46 scenarios passed; substituted GitHub/HTTP commands, no publication |
 | Tag-version release preparation | Not rerun for this update |
-| Build/release workflow actionlint validation | Passed with actionlint 1.7.12; Dependabot YAML syntax also checked |
-| Read-only release checks against v0.1.0 | Passed: tag/main ancestry, package commit, GitHub checksums and NuGet payload comparison |
+| Build/release workflow actionlint validation | Previously passed with actionlint 1.7.12; not rerun for conformance changes |
+| Read-only release checks against v0.1.0 | Previously passed; not rerun for conformance changes |
 | Fresh CLI homes and required SDK environment guards | Passed |
 | User/machine PATH raw registry values and kinds | Unchanged |
-| Revised UI-triggered workflow on GitHub | Not executed; hosted verification remains required |
+| Conformance candidate and revised UI-triggered workflow on GitHub | Not executed; hosted verification remains required |
 
 The completed pipeline used an explicit local feed for the pinned test dependencies.
 The package consumer used a separate local-only feed and fresh caches. The earlier

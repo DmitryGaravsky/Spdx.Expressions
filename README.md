@@ -1,14 +1,18 @@
 # Spdx.Expressions
 
-[![Build and test](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/workflows/ci.yml/badge.svg)](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/workflows/ci.yml)
+[![Build and test](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/Spdx.Expressions)](https://www.nuget.org/packages/Spdx.Expressions/)
+[![License](https://img.shields.io/github/license/DmitryGaravsky/Spdx.Expressions)](LICENSE)
+[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](Spdx.Expressions/Spdx.Expressions.csproj)
+[![SPDX License List 3.29.0](https://img.shields.io/badge/SPDX%20License%20List-3.29.0-blue)](docs/catalogue.md)
 
 A standalone .NET 10 library for applications that read, check or display SPDX license
 expressions. It preserves original text and source spans, checks identifiers against a
 pinned offline SPDX License List, and formats spacing while retaining spelling, grouping
 and operand order. There are no runtime NuGet dependencies or runtime network requests.
 
-**Status:** unpublished development package; targets **net10.0 only**. Package-name
-availability and publication remain separate decisions. The syntax profile is SPDX-2.3.1;
+**Status:** published on [NuGet.org](https://www.nuget.org/packages/Spdx.Expressions/);
+targets **net10.0 only**. The syntax profile is SPDX-2.3.1;
 the embedded catalogue is v3.29.0. These versions are independent of the package version.
 Source: [DmitryGaravsky/Spdx.Expressions](https://github.com/DmitryGaravsky/Spdx.Expressions).
 
@@ -32,14 +36,21 @@ expression strings; it does not extract them from prose or read complete SBOM do
 
 ## Get started
 
-Install the stable .NET 10 SDK selected by global.json. From a source checkout, run:
+With the .NET 10 SDK, install the package from your application's project directory:
+
+```powershell
+dotnet add package Spdx.Expressions --source https://api.nuget.org/v3/index.json
+```
+
+See [NuGet setup](docs/usage.md#install-from-nuget) for a complete console application setup.
+To run the repository examples, use a source checkout with the SDK selected by global.json:
 
 ```powershell
 dotnet run --project Spdx.Expressions.Examples -- quick-start
 ```
 
 To consume a local `.nupkg` in your own application, follow
-[local package setup](docs/usage.md#use-a-local-package). No NuGet.org publication is assumed.
+[local package setup](docs/usage.md#use-a-local-package).
 PowerShell 7 is needed for repository verification scripts, not for library use.
 
 The following complete console program is also the `quick-start` example:
@@ -78,7 +89,7 @@ Diagnostics truncated: False
 
 | Guide | Contents |
 | --- | --- |
-| [Usage and examples](docs/usage.md) | Local setup, runnable scenarios and expected output |
+| [Usage and examples](docs/usage.md) | NuGet and local setup, runnable scenarios and expected output |
 | [API guide](docs/api.md) | Operations, result flags, AST and source evidence |
 | [Syntax reference](docs/syntax.md) | Grammar policies, diagnostic codes, limits and cancellation |
 | [Embedded catalogue](docs/catalogue.md) | Lookup behavior, dataset identity and updates |

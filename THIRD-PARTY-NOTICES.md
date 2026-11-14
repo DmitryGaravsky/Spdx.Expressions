@@ -18,5 +18,3 @@ invent an upstream license grant. Full license texts are not embedded.
 The upstream data and documentation are distinct from this library's implementation.
 The implementation is MIT licensed, copyright (c) 2026 Dmitry Garavsky; see LICENSE.
 That license declaration does not replace the upstream data's notices or provenance.
-Package-name availability and publication require a separate release decision.
-This local development package is not a published release.
