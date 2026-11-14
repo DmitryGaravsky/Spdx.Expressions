@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Version, [Parameter(Mandatory)][string]$Directory)
+param([Parameter(Mandatory)][string]$Version, [Parameter(Mandatory)][string]$Directory, [string]$Commit)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Version = & "$PSScriptRoot/get-version.ps1" -Version $Version
@@ -35,6 +35,11 @@ try {
         throw 'Package identity does not match the release version.'
     }
     $repository = $metadata.Element($ns + 'repository')
+    if ($PSBoundParameters.ContainsKey('Commit') -and
+        ($Commit -cnotmatch '\A[0-9a-f]{40}\z' -or $null -eq $repository.Attribute('commit') -or
+        $repository.Attribute('commit').Value -cne $Commit)) {
+        throw 'Package repository commit does not match the release event.'
+    }
     $url = 'https://github.com/DmitryGaravsky/Spdx.Expressions'
     if ($metadata.Element($ns + 'projectUrl').Value -cne $url -or
         $repository.Attribute('url').Value -cne $url -or $repository.Attribute('type').Value -cne 'git' -or

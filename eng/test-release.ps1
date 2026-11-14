@@ -17,27 +17,38 @@ $result = [ordered]@{ status = 'Running'; cases = $completed; networkUsed = $fal
 $getVersion = Join-Path $PSScriptRoot 'get-version.ps1'
 $validator = Join-Path $PSScriptRoot 'verify-release-assets.ps1'
 $publisher = Join-Path $PSScriptRoot 'publish-github-release.ps1'
+$sourceCheck = Join-Path $PSScriptRoot 'verify-release-source.ps1'
+$nugetCheck = Join-Path $PSScriptRoot 'check-nuget-package.ps1'
+$compare = Join-Path $PSScriptRoot 'compare-package-content.ps1'
+$commit = '0123456789abcdef0123456789abcdef01234567'
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) {
         throw $Message
     }
 }
-function Reject([scriptblock]$Action) {
+function Reject([scriptblock]$Action, [string]$MessagePattern) {
     $rejected = $false
     try { & $Action 6>&1 | Out-Null }
-    catch { $rejected = $true }
+    catch {
+        Assert ($_.Exception.Message -match $MessagePattern) "Unexpected failure: $($_.Exception.Message)"
+        $rejected = $true
+    }
     Assert $rejected 'Expected rejection did not occur.'
+}
+function Update-Checksum([string]$Directory, [string]$Version = '1.2.3-preview.1') {
+    $name = "Spdx.Expressions.$Version.nupkg"
+    $hash = (Get-FileHash -LiteralPath (Join-Path $Directory $name)).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText((Join-Path $Directory 'SHA256SUMS'), "$hash  $name" + [char]10)
 }
 function New-Fixture([string]$Name, [string]$Version = '1.2.3-preview.1',
     [string]$MetadataVersion = '', [string]$RepositoryUrl = 'https://github.com/DmitryGaravsky/Spdx.Expressions',
-    [string]$OmitEntry = '') {
+    [string]$OmitEntry = '', [string]$MetadataCommit = $commit) {
     $directory = Join-Path $suite $Name
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     if (-not $MetadataVersion) {
         $MetadataVersion = $Version
     }
-    $packageName = "Spdx.Expressions.$Version.nupkg"
-    $archive = [IO.Compression.ZipFile]::Open((Join-Path $directory $packageName), 'Create')
+    $archive = [IO.Compression.ZipFile]::Open((Join-Path $directory "Spdx.Expressions.$Version.nupkg"), 'Create')
     try {
         $writer = [IO.StreamWriter]::new($archive.CreateEntry('Spdx.Expressions.nuspec').Open())
         try {
@@ -46,7 +57,7 @@ function New-Fixture([string]$Name, [string]$Version = '1.2.3-preview.1',
 <id>Spdx.Expressions</id><version>$MetadataVersion</version><authors>Dmitry Garavsky</authors>
 <license type="expression">MIT</license>
 <projectUrl>https://github.com/DmitryGaravsky/Spdx.Expressions</projectUrl>
-<repository type="git" url="$RepositoryUrl" />
+<repository type="git" url="$RepositoryUrl" commit="$MetadataCommit" />
 </metadata></package>
 "@)
         }
@@ -64,8 +75,7 @@ function New-Fixture([string]$Name, [string]$Version = '1.2.3-preview.1',
         }
     }
     finally { $archive.Dispose() }
-    $hash = (Get-FileHash -LiteralPath (Join-Path $directory $packageName)).Hash.ToLowerInvariant()
-    [IO.File]::WriteAllText((Join-Path $directory 'SHA256SUMS'), "$hash  $packageName" + [char]10)
+    Update-Checksum $directory $Version
     return $directory
 }
 function Copy-Fixture([string]$Name) {
@@ -76,52 +86,78 @@ function Copy-Fixture([string]$Name) {
     }
     return $directory
 }
+function Change-Entry([string]$Directory, [string]$Name, [string]$Text, [switch]$Append, [switch]$Delete) {
+    $package = Join-Path $Directory "Spdx.Expressions.$version.nupkg"
+    $archive = [IO.Compression.ZipFile]::Open($package, 'Update')
+    try {
+        if (-not $Append -and $null -ne $archive.GetEntry($Name)) {
+            $archive.GetEntry($Name).Delete()
+        }
+        if (-not $Delete) {
+            $writer = [IO.StreamWriter]::new($archive.CreateEntry($Name).Open())
+            try { $writer.Write($Text) }
+            finally { $writer.Dispose() }
+        }
+    }
+    finally { $archive.Dispose() }
+    Update-Checksum $Directory
+    return $package
+}
 function Reset-Mock {
     $script:releaseTestState = @{
-        Exists = $false; Draft = $true; Prerelease = $true; FailCreate = $false
-        TagExists = $true; RemoveTagOnUpload = $false
-        FailUploadNumber = 0; UploadCount = 0; Assets = @{}
+        Exists = $true; Draft = $false; Prerelease = $true; Immutable = $false; Id = 7
+        TagExists = $true; TagCommit = $commit; MainStatus = 'ahead'; MergeBase = $commit
+        MoveTagOnUpload = $false; MoveTagOnDownload = $false; ReplaceOnRead = 0; ReleaseReads = 0
+        FailUploadNumber = 0; UploadCount = 0; Assets = @{}; CorruptUpload = $false; DropUploads = $false
+        HttpStatus = 404; HttpCalls = 0; PublishedPackage = ''; FailApi = $false
         Calls = [Collections.Generic.List[object]]::new()
     }
 }
-# This function shadows the executable in child scripts. Unknown operations fail closed.
+# Substitutes shadow external commands in child scripts; unknown operations fail closed.
 function gh {
     $call = @($args)
     $global:LASTEXITCODE = 0
     $releaseTestState.Calls.Add($call)
     if ($call[0] -ceq 'api') {
-        Assert ($call.Count -eq 5 -and $call[1] -cmatch '\Arepos/DmitryGaravsky/Spdx.Expressions/git/ref/tags/v[0-9a-z.-]+\z' -and
-            $call[2] -ceq '--method' -and $call[3] -ceq 'GET' -and $call[4] -ceq '--silent') 'Unexpected API operation.'
-        if (-not $releaseTestState.TagExists) {
+        Assert ($call.Count -eq 4 -and $call[2] -ceq '--method' -and $call[3] -ceq 'GET') 'Unexpected API operation.'
+        if ($releaseTestState.FailApi) {
             $global:LASTEXITCODE = 1
+            return
         }
-        return
+        switch -Regex ($call[1]) {
+            '\Arepos/DmitryGaravsky/Spdx.Expressions/commits/refs/tags/(v[0-9a-z.-]+)\z' {
+                if (-not $releaseTestState.TagExists) {
+                    $global:LASTEXITCODE = 1
+                    return
+                }
+                return (@{ sha = $releaseTestState.TagCommit } | ConvertTo-Json)
+            }
+            '\Arepos/DmitryGaravsky/Spdx.Expressions/compare/[0-9a-f]{40}\.\.\.main\z' {
+                return (@{ status = $releaseTestState.MainStatus; merge_base_commit = @{ sha = $releaseTestState.MergeBase } } | ConvertTo-Json)
+            }
+            '\Arepos/DmitryGaravsky/Spdx.Expressions/releases/tags/(v[0-9a-z.-]+)\z' {
+                if (-not $releaseTestState.Exists) {
+                    $global:LASTEXITCODE = 1
+                    return
+                }
+                $releaseTestState.ReleaseReads++
+                if ($releaseTestState.ReleaseReads -eq $releaseTestState.ReplaceOnRead) {
+                    $releaseTestState.Id++
+                }
+                return (@{
+                    id = $releaseTestState.Id; tag_name = $Matches[1]; draft = $releaseTestState.Draft
+                    prerelease = $releaseTestState.Prerelease; immutable = $releaseTestState.Immutable
+                    assets = @($releaseTestState.Assets.Keys | ForEach-Object { @{ name = $_ } })
+                } | ConvertTo-Json -Depth 4)
+            }
+            default { throw 'Unexpected GitHub API endpoint.' }
+        }
     }
     Assert ($call.Count -ge 4 -and $call[-2] -ceq '--repo' -and $call[-1] -ceq 'DmitryGaravsky/Spdx.Expressions') 'Unexpected publication destination.'
     Assert ($call[0] -ceq 'release') 'Only release operations are allowed in the substitute.'
     switch ($call[1]) {
-        'view' {
-            if (-not $releaseTestState.Exists) {
-                $global:LASTEXITCODE = 1
-                return
-            }
-            return (@{
-                isDraft = $releaseTestState.Draft; isPrerelease = $releaseTestState.Prerelease
-                assets = @($releaseTestState.Assets.Keys | ForEach-Object { @{ name = $_ } })
-            } | ConvertTo-Json -Depth 4)
-        }
-        'create' {
-            if ($releaseTestState.FailCreate) {
-                $global:LASTEXITCODE = 1
-                return
-            }
-            Assert ($call -contains '--draft' -and $call -contains '--verify-tag') 'Draft creation must verify an existing tag.'
-            $releaseTestState.Exists = $true
-            $releaseTestState.Draft = $true
-            $releaseTestState.Prerelease = $call -contains '--prerelease'
-        }
         'upload' {
-            Assert $releaseTestState.Draft 'An upload targeted a published release.'
+            Assert (-not $releaseTestState.Immutable -and -not $releaseTestState.Draft) 'Expected a mutable published release.'
             $releaseTestState.UploadCount++
             if ($releaseTestState.UploadCount -eq $releaseTestState.FailUploadNumber) {
                 $global:LASTEXITCODE = 1
@@ -129,163 +165,214 @@ function gh {
             }
             $name = [IO.Path]::GetFileName($call[3])
             Assert (-not $releaseTestState.Assets.ContainsKey($name)) 'An asset was overwritten.'
-            $releaseTestState.Assets[$name] = [IO.File]::ReadAllBytes($call[3])
-            if ($releaseTestState.RemoveTagOnUpload) {
-                $releaseTestState.TagExists = $false
+            if (-not $releaseTestState.DropUploads) {
+                $bytes = [IO.File]::ReadAllBytes($call[3])
+                if ($releaseTestState.CorruptUpload) { $bytes[0] = $bytes[0] -bxor 1 }
+                $releaseTestState.Assets[$name] = $bytes
+            }
+            if ($releaseTestState.MoveTagOnUpload) {
+                $releaseTestState.TagCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             }
         }
         'download' {
             $name = $call[4]
             [IO.File]::WriteAllBytes((Join-Path $call[6] $name), $releaseTestState.Assets[$name])
+            if ($releaseTestState.MoveTagOnDownload) {
+                $releaseTestState.TagCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            }
         }
-        'edit' {
-            Assert ($releaseTestState.Assets.Count -eq 2) 'Incomplete draft was published.'
-            Assert ($call -contains '--draft=false' -and $call -contains '--verify-tag') 'Publishing must verify an existing tag.'
-            if (-not $releaseTestState.TagExists) {
-                $global:LASTEXITCODE = 1
-                return
-            }
-            if ($releaseTestState.Prerelease) {
-                Assert ($call -contains '--latest=false') 'Prerelease must not become latest.'
-            }
-            else {
-                Assert ($call -notcontains '--latest=false') 'Stable release must use GitHub latest selection.'
-            }
-            $releaseTestState.Draft = $false
-        }
-        default { throw "Unexpected GitHub CLI operation: $($call[1])" }
+        default { throw "Unexpected GitHub CLI operation: $($call[1]); release text must remain unchanged." }
     }
 }
+function Invoke-WebRequest {
+    param([string]$Uri, [string]$OutFile, [int]$TimeoutSec)
+    $releaseTestState.HttpCalls++
+    Assert ($Uri -ceq 'https://api.nuget.org/v3-flatcontainer/spdx.expressions/1.2.3-preview.1/spdx.expressions.1.2.3-preview.1.nupkg') 'Unexpected package URL.'
+    Assert ($TimeoutSec -gt 0 -and $TimeoutSec -le 60) 'Download must have a bounded timeout.'
+    if ($releaseTestState.HttpStatus -ne 200) {
+        $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]$releaseTestState.HttpStatus)
+        throw [Microsoft.PowerShell.Commands.HttpResponseException]::new('Simulated HTTP failure', $response)
+    }
+    Copy-Item -LiteralPath $releaseTestState.PublishedPackage -Destination $OutFile
+}
 function Assert-NoMutation {
-    $mutations = @($releaseTestState.Calls | Where-Object { $_[1] -in @('create','upload','edit') })
-    Assert ($mutations.Count -eq 0) 'Unexpected remote mutation on retry or collision.'
+    Assert (@($releaseTestState.Calls | Where-Object { $_[0] -eq 'release' -and $_[1] -ne 'download' }).Count -eq 0) 'Unexpected remote mutation.'
 }
 $previousExitCode = Get-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
 $previousExitCodeValue = if ($null -ne $previousExitCode) { $previousExitCode.Value } else { $null }
 try {
-    foreach ($version in @('0.1.0','1.2.3-preview.1','1.2.3-rc.0','10.0.0','1.2.3-a-1')) {
-        Assert ((& $getVersion -Tag "v$version") -ceq $version) 'Valid version rejected.'
+    foreach ($value in @('0.1.0','1.2.3-preview.1','1.2.3-rc.0','10.0.0','1.2.3-a-1')) {
+        Assert ((& $getVersion -Tag "v$value") -ceq $value) 'Valid version rejected.'
     }
     $completed.Add('Stable and prerelease tags')
     foreach ($tag in @('', '1.2.3','V1.2.3','v','v01.2.3','v1.02.3','v1.2','v1.2.3.4','v1.2.3+build',
         'v1.2.3-RC.1','v1.2.3-01','v1.2.3-preview..1','v1.2.3/other',('v1.2.3' + [char]10))) {
-        Reject { & $getVersion -Tag $tag }
+        Reject { & $getVersion -Tag $tag } 'Release tags|Invalid version'
     }
-    Reject { & $getVersion -Version '' }
-    Reject { & $getVersion -Version '1.2.3' -Tag 'v1.2.3' }
+    Reject { & $getVersion -Version '' } 'Invalid version'
+    Reject { & $getVersion -Version '1.2.3' -Tag 'v1.2.3' } 'Specify Version or Tag'
     $completed.Add('Malformed tags and conflicting inputs rejected')
     $version = '1.2.3-preview.1'
     $fixture = New-Fixture 'valid'
-    & $validator -Version $version -Directory $fixture 6>&1 | Out-Null
-    $completed.Add('Valid single-package assets and namespace-qualified nuspec')
+    $package = Join-Path $fixture "Spdx.Expressions.$version.nupkg"
+    & $validator -Version $version -Directory $fixture -Commit $commit 6>&1 | Out-Null
+    $completed.Add('Valid assets, namespace-qualified nuspec and exact commit')
     Push-Location $fixture
-    try {
-        & $validator -Version $version -Directory . 6>&1 | Out-Null
-    }
+    try { & $validator -Version $version -Directory . 6>&1 | Out-Null }
     finally { Pop-Location }
     $completed.Add('Relative asset paths follow the PowerShell location')
     $bad = Copy-Fixture 'tampered'
     [IO.File]::AppendAllText((Join-Path $bad "Spdx.Expressions.$version.nupkg"), 'changed')
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'checksum'
     $completed.Add('Package tampering rejected')
     $bad = Copy-Fixture 'checksum'
     [IO.File]::AppendAllText((Join-Path $bad 'SHA256SUMS'), 'unexpected line')
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'checksum'
     $completed.Add('Invalid checksum manifest rejected')
     $bad = Copy-Fixture 'extra-file'
     [IO.File]::WriteAllText((Join-Path $bad 'unexpected.txt'), 'extra')
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'Expected exactly'
     $completed.Add('Extra files rejected')
     $bad = Copy-Fixture 'extra-directory'
     [IO.Directory]::CreateDirectory((Join-Path $bad 'unexpected')) | Out-Null
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'Expected exactly'
     $completed.Add('Extra directories rejected')
     $bad = New-Fixture 'wrong-version' -MetadataVersion '9.9.9'
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'identity'
     $completed.Add('Nuspec version mismatch rejected despite valid checksum')
     $bad = New-Fixture 'wrong-repository' -RepositoryUrl 'https://example.invalid/other'
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'metadata'
     $completed.Add('Repository metadata mismatch rejected')
     $bad = New-Fixture 'missing-license' -OmitEntry 'LICENSE'
-    Reject { & $validator -Version $version -Directory $bad }
+    Reject { & $validator -Version $version -Directory $bad } 'Missing release package entry'
     $completed.Add('Missing required package content rejected')
+    $bad = New-Fixture 'wrong-commit' -MetadataCommit ('a' * 40)
     Reset-Mock
-    & $publisher -Tag "v$version" -Directory $fixture 6>&1 | Out-Null
-    Assert (-not $releaseTestState.Draft -and $releaseTestState.Assets.Count -eq 2) 'Draft did not publish completely.'
-    $completed.Add('Prerelease draft, assets and publication')
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $bad } 'repository commit'
+    Assert ($releaseTestState.Calls.Count -eq 0) 'Wrong package commit reached GitHub.'
+    $completed.Add('Wrong package commit rejected before network')
+    Reset-Mock
+    & $publisher -Tag "v$version" -Commit $commit -Directory $fixture -CheckOnly 6>&1 | Out-Null
+    Assert-NoMutation
+    $completed.Add('Preflight accepts an empty published UI release without changes')
+    & $publisher -Tag "v$version" -Commit $commit -Directory $fixture 6>&1 | Out-Null
+    Assert ($releaseTestState.Assets.Count -eq 2) 'Published release did not receive both files.'
+    $completed.Add('Published UI release receives verified files without editing text')
     $releaseTestState.Calls.Clear()
-    & $publisher -Tag "v$version" -Directory $fixture 6>&1 | Out-Null
+    & $publisher -Tag "v$version" -Commit $commit -Directory $fixture 6>&1 | Out-Null
     Assert-NoMutation
     $completed.Add('Matching published release is unchanged on retry')
+    $releaseTestState.Immutable = $true
+    & $publisher -Tag "v$version" -Commit $commit -Directory $fixture 6>&1 | Out-Null
+    Assert-NoMutation
+    $completed.Add('Complete immutable release permits a read-only retry')
+    $releaseTestState.Immutable = $false
     $releaseTestState.Assets['SHA256SUMS'] = [Text.Encoding]::UTF8.GetBytes('different')
-    $releaseTestState.Calls.Clear()
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'asset differs'
     Assert-NoMutation
     $completed.Add('Conflicting remote bytes rejected without overwrite')
     Reset-Mock
     $releaseTestState.FailUploadNumber = 2
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert ($releaseTestState.Draft -and $releaseTestState.Assets.Count -eq 1) 'Upload failure did not leave a partial draft.'
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'GitHub CLI failed'
+    Assert ($releaseTestState.Assets.Count -eq 1) 'Expected partial upload.'
     $releaseTestState.FailUploadNumber = 0
-    & $publisher -Tag "v$version" -Directory $fixture 6>&1 | Out-Null
-    Assert (-not $releaseTestState.Draft) 'Partial draft retry did not finish.'
-    $completed.Add('Partial upload failure and draft recovery')
-    $releaseTestState.Assets.Remove('SHA256SUMS')
-    $releaseTestState.Calls.Clear()
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert-NoMutation
-    $completed.Add('Published release missing an asset rejected')
+    & $publisher -Tag "v$version" -Commit $commit -Directory $fixture 6>&1 | Out-Null
+    Assert ($releaseTestState.Assets.Count -eq 2) 'Partial upload retry did not finish.'
+    $completed.Add('Partial published release upload can resume')
+    foreach ($case in @(
+        @{ Name='Missing tag'; Field='TagExists'; Value=$false; Pattern='Cannot read' },
+        @{ Name='Moved tag'; Field='TagCommit'; Value=('a' * 40); Pattern='no longer points' },
+        @{ Name='Commit outside main'; Field='MainStatus'; Value='diverged'; Pattern='belong to main' },
+        @{ Name='Wrong merge base'; Field='MergeBase'; Value=('b' * 40); Pattern='belong to main' },
+        @{ Name='Missing release'; Field='Exists'; Value=$false; Pattern='Cannot read' },
+        @{ Name='Draft release'; Field='Draft'; Value=$true; Pattern='published release' },
+        @{ Name='Wrong classification'; Field='Prerelease'; Value=$false; Pattern='classification' },
+        @{ Name='Immutable incomplete release'; Field='Immutable'; Value=$true; Pattern='immutable release' },
+        @{ Name='GitHub API failure'; Field='FailApi'; Value=$true; Pattern='Cannot read' }
+    )) {
+        Reset-Mock
+        $releaseTestState[$case.Field] = $case.Value
+        Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture -CheckOnly } $case.Pattern
+        Assert-NoMutation
+        $completed.Add($case.Name + ' rejected before publication')
+    }
     Reset-Mock
-    $releaseTestState.Exists = $true
-    $releaseTestState.Prerelease = $false
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert-NoMutation
-    $completed.Add('Prerelease classification mismatch rejected')
+    Reject { & $sourceCheck -Tag "v$version" -Commit 'main' } 'full commit SHA'
+    Assert ($releaseTestState.Calls.Count -eq 0) 'Invalid commit reached GitHub.'
+    $completed.Add('Non-SHA source rejected before network')
     Reset-Mock
-    $releaseTestState.Exists = $true
     $releaseTestState.Assets['unexpected.txt'] = [byte[]]@(1)
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'unexpected or duplicate assets'
     Assert-NoMutation
     $completed.Add('Unexpected remote asset rejected')
     Reset-Mock
-    $releaseTestState.FailCreate = $true
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert (@($releaseTestState.Calls | Where-Object { $_[1] -in @('upload','edit') }).Count -eq 0) 'Failed create continued publication.'
-    $completed.Add('Failed draft creation stops publication')
+    $releaseTestState.ReplaceOnRead = 2
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'replaced'
+    Assert-NoMutation
+    $completed.Add('Replaced release rejected before upload')
     Reset-Mock
-    $bad = Copy-Fixture 'publisher-tampered'
-    [IO.File]::AppendAllText((Join-Path $bad "Spdx.Expressions.$version.nupkg"), 'changed')
-    Reject { & $publisher -Tag "v$version" -Directory $bad }
-    Assert ($releaseTestState.Calls.Count -eq 0) 'Invalid local package reached the GitHub CLI.'
-    $completed.Add('Invalid local assets rejected before GitHub invocation')
+    $releaseTestState.Assets['SHA256SUMS'] = [IO.File]::ReadAllBytes((Join-Path $fixture 'SHA256SUMS'))
+    $releaseTestState.MoveTagOnDownload = $true
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'no longer points'
+    Assert-NoMutation
+    $completed.Add('Tag moved during remote verification prevents upload')
+    Reset-Mock
+    $releaseTestState.MoveTagOnUpload = $true
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'no longer points'
+    $completed.Add('Tag moved during upload cannot report success')
+    Reset-Mock
+    $releaseTestState.CorruptUpload = $true
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'asset differs'
+    $completed.Add('Uploaded bytes are downloaded and verified')
+    Reset-Mock
+    $releaseTestState.DropUploads = $true
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $fixture } 'lost an asset'
+    $completed.Add('Missing uploaded asset cannot report success')
     Reset-Mock
     $stable = New-Fixture 'stable' -Version '1.2.3'
-    & $publisher -Tag 'v1.2.3' -Directory $stable 6>&1 | Out-Null
-    Assert (-not $releaseTestState.Prerelease -and -not $releaseTestState.Draft) 'Stable release classification failed.'
-    $completed.Add('Stable release publication flags')
+    $releaseTestState.Prerelease = $false
+    $releaseTestState.MainStatus = 'identical'
+    & $publisher -Tag 'v1.2.3' -Commit $commit -Directory $stable 6>&1 | Out-Null
+    $completed.Add('Stable release at main HEAD receives assets')
+    & $compare -ExpectedPackage $package -ActualPackage $package 6>&1 | Out-Null
+    $completed.Add('Identical NuGet package accepted')
+    $signed = Copy-Fixture 'signed'
+    $signedPackage = Change-Entry $signed '.signature.p7s' 'Independent signature placeholder' -Append
+    & $compare -ExpectedPackage $package -ActualPackage $signedPackage 6>&1 | Out-Null
+    $completed.Add('Repository signature does not change payload identity')
+    foreach ($case in @(
+        @{ Name='changed-payload'; Entry='README.md'; Text=('X' * 27); Pattern='bytes differ' },
+        @{ Name='extra-payload'; Entry='extra.txt'; Text='extra'; Pattern='file set differs' },
+        @{ Name='missing-payload'; Entry='LICENSE'; Text=''; Delete=$true; Pattern='file set differs' },
+        @{ Name='duplicate-entry'; Entry='README.md'; Text='duplicate'; Append=$true; Pattern='Duplicate' },
+        @{ Name='case-collision'; Entry='readme.md'; Text='duplicate'; Append=$true; Pattern='Duplicate' }
+    )) {
+        $bad = Copy-Fixture $case.Name
+        $parameters = @{ Directory=$bad; Name=$case.Entry; Text=$case.Text }
+        if ($case.ContainsKey('Delete')) { $parameters.Delete = $true }
+        if ($case.ContainsKey('Append')) { $parameters.Append = $true }
+        $badPackage = Change-Entry @parameters
+        Reject { & $compare -ExpectedPackage $package -ActualPackage $badPackage } $case.Pattern
+        $completed.Add('NuGet ' + $case.Name + ' rejected')
+    }
     Reset-Mock
-    $releaseTestState.Exists = $true
-    $releaseTestState.TagExists = $false
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert-NoMutation
-    $completed.Add('Existing draft with a missing or unreadable tag is rejected')
-    Reset-Mock
-    $releaseTestState.TagExists = $false
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert-NoMutation
-    $completed.Add('Missing or unreadable tag prevents draft creation')
-    Reset-Mock
-    $releaseTestState.RemoveTagOnUpload = $true
-    Reject { & $publisher -Tag "v$version" -Directory $fixture }
-    Assert ($releaseTestState.Draft) 'Draft published after its tag disappeared.'
-    Assert (@($releaseTestState.Calls | Where-Object { $_[1] -eq 'edit' -and $_ -contains '--verify-tag' }).Count -eq 1) 'Final publication did not verify the tag.'
-    $completed.Add('Tag disappearance during upload prevents publication')
+    Assert (-not (& $nugetCheck -Version $version -Directory $fixture -Commit $commit)) '404 must permit a first publication.'
+    Assert ($releaseTestState.HttpCalls -eq 1) 'Expected one bounded request.'
+    $completed.Add('NuGet 404 reports an absent version')
+    $releaseTestState.HttpStatus = 503
+    Reject { & $nugetCheck -Version $version -Directory $fixture -Commit $commit } 'Simulated HTTP failure'
+    $completed.Add('NuGet service error does not permit publication')
+    $releaseTestState.HttpStatus = 200
+    $releaseTestState.PublishedPackage = $signedPackage
+    Assert (& $nugetCheck -Version $version -Directory $fixture -Commit $commit) 'Matching existing package must skip publication.'
+    $completed.Add('Existing matching NuGet version permits a safe retry')
+    $releaseTestState.PublishedPackage = Join-Path $suite 'changed-payload/Spdx.Expressions.1.2.3-preview.1.nupkg'
+    Reject { & $nugetCheck -Version $version -Directory $fixture -Commit $commit } 'bytes differ'
+    $completed.Add('Conflicting existing NuGet version fails closed')
     $result.status = 'Passed'
 }
 finally {
-    if ($result.status -eq 'Running') {
-        $result.status = 'Failed'
-    }
+    if ($result.status -eq 'Running') { $result.status = 'Failed' }
     $result | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $suite 'result.json')
     if ($null -eq $previousExitCode) {
         Remove-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue

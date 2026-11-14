@@ -131,8 +131,10 @@ configured workflows do not prove that features work or hosted checks have passe
 - MIT covers this implementation under Dmitry Garavsky's authorship. Upstream data notices are
   separate. Do not invent repository URLs or claim ownership/availability of a NuGet package name.
 - Build CI uses read permissions and does not publish. Local verification and release preparation
-  never publish. The separate release workflow publishes only version tags and only the retained
-  verified artifacts. The GitHub publisher is reserved for that workflow or an explicitly
+  never publish. The separate release workflow starts only when a GitHub release for a version
+  tag is published, and publishes only retained verified artifacts. Tag push alone does not
+  publish. Preserve user-authored release text and never overwrite differing remote files.
+  The GitHub publisher is reserved for that workflow or an explicitly
   authorized publication task. Never push tags or publish implicitly.
 - Inspect the complete change and report tests, limitations and remaining risks. Local success
   does not imply hosted CI passed. At a major phase, review any existing PR description against

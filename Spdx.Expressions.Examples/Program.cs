@@ -1,5 +1,4 @@
 using System;
-using Spdx.Expressions;
 
 namespace Spdx.Expressions.Examples {
     static class Program {

@@ -29,14 +29,18 @@ Temporary consumer caches and CLI homes are not uploaded. Build artifacts includ
 run attempt in their names so retries retain earlier evidence without name collisions.
 
 Build CI has contents: read, does not persist checkout credentials and never publishes.
-The separate [release workflow](../.github/workflows/release.yml) starts only on version
-tags. It requires verification on all three platforms and publishes the exact retained
-Linux artifact. NuGet authentication and GitHub write permissions are confined to its
-publication jobs. See [Release](release.md) for setup, version policy and retries.
+The separate [release workflow](../.github/workflows/release.yml) starts when a GitHub
+release is published for a version tag. Pushing a tag alone does not publish. It requires
+verification on all three platforms and publishes the exact retained Linux artifact.
+NuGet authentication and GitHub write permissions are confined to its publication jobs.
+Existing NuGet versions must match the verified payload; GitHub releases retain their
+user-authored text and receive the package and checksum attachments. See [Release](release.md)
+for setup, version policy, manual protections and retries.
 
 Both workflows apply SDK isolation guards, including before SDK preparation. Script
-tests use a mocked GitHub CLI and synthetic packages, so normal CI does not need
-publication credentials.
+tests substitute GitHub and HTTP commands and use synthetic packages, so normal CI
+does not need publication credentials. Both workflows pin actions to full commit SHAs;
+[Dependabot](../.github/dependabot.yml) proposes weekly updates without automatic merging.
 
 This describes configuration, not a completed hosted run. Local Windows success does
 not establish Linux/macOS or GitHub Actions success. Actual results are in [Testing](testing.md).

@@ -23,9 +23,9 @@ verification. CI installs the declared SDK.
 ./eng/verify-release-assets.ps1 -Version 0.1.0-preview.1 -Directory ./artifacts/release/0.1.0-preview.1
 ```
 
-Verification already includes the standalone release-script tests. Those tests use
-synthetic packages and a mocked GitHub CLI: no network, credentials or publication.
-Both verify.ps1 and prepare-release.ps1 accept an optional RestoreSource for a local feed.
+Verification includes offline release-script tests with synthetic packages and substituted
+GitHub/HTTP commands: no network, credentials or publication. Both verify.ps1 and
+prepare-release.ps1 accept an optional RestoreSource for a local feed.
 
 Preparation validates the tag, runs the complete pipeline with that version, then copies
 the exact tested nupkg into a new release directory. Version is applied to restore,
@@ -42,82 +42,131 @@ The release directory contains exactly:
 Existing output directories are rejected before verification. Preserve prepared files
 and failed evidence; use a new version for changed published bytes. Asset verification
 checks the complete file set, hash, nuspec identity/version, repository/license/author
-metadata and required package contents. Relative Directory and OutputDirectory arguments
-are resolved against the caller's PowerShell location, including after Set-Location.
+metadata and required package contents. Publication additionally requires the nuspec
+repository commit to equal the release event commit. Relative Directory and
+OutputDirectory arguments follow the caller's PowerShell location.
 
 ## Version policy
 
 Tags are v followed by three canonical numeric components, optionally a lowercase
 SemVer prerelease suffix: v1.2.3 or v1.2.3-preview.1. Leading zeroes in numeric components
 or numeric prerelease identifiers, uppercase suffixes and build metadata are rejected.
-The tag controls both package and assembly informational versions. A prerelease tag
-creates a GitHub prerelease; a stable tag creates a stable release.
+The tag controls both package and assembly informational versions. The GitHub release's
+pre-release checkbox must match the tag: checked for a suffix such as -preview.1,
+unchecked for a stable version. Classification mismatches stop publication.
+
+## Publish from GitHub UI
+
+1. Commit and push the reviewed changes to main and check the build CI results. The
+   selected commit must contain this release workflow; existing old tags retain their
+   old workflow. Do not move or reuse a published version tag.
+2. Open **Releases → Draft a new release**. Create a new tag such as v0.1.1 targeting
+   main, or select an existing version tag whose commit belongs to main.
+3. Enter the release title and description. Select **This is a pre-release** only for
+   a prerelease version. Leave the asset list empty; the workflow supplies both files.
+4. Click **Publish release**. This creates the public GitHub release immediately and
+   starts the package pipeline. Saving a draft, editing the release text or pushing
+   a tag alone does not start publication.
+5. Follow the **Release** run in Actions. If the nuget environment requires approval,
+   approve it after verification. The workflow publishes to NuGet and attaches the
+   verified nupkg and SHA256SUMS to the existing GitHub release, preserving its text
+   and latest-release selection.
+6. Confirm that all jobs passed. NuGet acceptance is followed by asynchronous validation
+   and indexing: a successful push does not mean that installation is available yet.
+   Check the version on NuGet.org after processing completes.
+
+The trigger is [release: published](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release),
+which covers stable releases and prereleases, including releases published from drafts.
+The public GitHub release can temporarily have no attachments while checks run or after
+an unsuccessful run. Its existence alone is not evidence of a successful NuGet publication.
 
 ## GitHub workflow
 
-The separate [release workflow](../.github/workflows/release.yml) runs only on pushed
-v* tags. Main/PR/manual [build CI](ci.md) never publishes.
-
 ```text
-Version tag ──→ validate version ──→ Windows / Linux / macOS verification
+Publish GitHub release ──→ validate tag, event commit, main ancestry and release state
+                                                │
+                                                ▼
+                               Windows / Linux / macOS verification
                                                 │
                                                 ▼
                               retain verified Linux package + SHA256SUMS
                                                 │
                                                 ▼
-                                     NuGet.org trusted publishing
+                         verify GitHub assets and existing NuGet version
                                                 │
                                                 ▼
-                                    GitHub release with the same files
+                           NuGet.org trusted publishing, if not already identical
+                                                │
+                                                ▼
+                         attach files to the existing release and verify downloads
 ```
 
-All three verification jobs must succeed before publication. Each runs local preparation
-and an actual isolated package consumer. Only the retained Linux artifact is published;
-publication jobs download and validate it without rebuilding. Verification logs are
-retained even on failure; release artifacts are retained for 30 days.
+All checkouts use the event's exact commit SHA. The explicit tag ref must still resolve
+to that SHA, and the commit must be an ancestor of main or main itself. These checks run
+before building, before publication and when attaching files. Repository tag protections
+remain necessary: API checks cannot atomically lock a tag against concurrent changes.
 
-Verification has contents: read. NuGet publication uses the nuget environment and
-id-token: write for [NuGet trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
-Only the GitHub release job has contents: write. Checkout does not persist credentials.
+All three verification jobs must succeed. Each runs local preparation and an actual
+isolated package consumer. Only the retained Linux artifact is published; publication
+jobs download and validate it without rebuilding. Logs are retained even on failure;
+release artifacts remain available for 30 days.
+
+Verification has contents: read. NuGet uses the nuget environment and id-token: write
+for [trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
+Only the attachment job has contents: write. Checkout does not persist credentials.
+Actions are pinned to full upstream commit SHAs; [Dependabot](../.github/dependabot.yml)
+proposes weekly Actions and NuGet dependency updates. Review those PRs before merging.
 Every SDK job has the five isolation guards described in [Testing](testing.md).
 
-## Setup before the first publication
+## Manual repository and account settings
 
-1. Confirm control of the Spdx.Expressions package ID on NuGet.org. Repository ownership
-   alone does not establish NuGet package-name availability or ownership.
-2. Create the GitHub environment named nuget. Restrict its deployment tags to v* and
-   configure any required reviewers according to repository policy.
-3. Set environment variable NUGET_USER to the NuGet account username that owns the
-   trusted publishing policy. This is a GitHub Actions variable, not an API-key secret.
-4. On that NuGet account, configure a trusted publishing policy for GitHub owner
-   DmitryGaravsky, repository Spdx.Expressions, workflow release.yml and environment nuget.
-5. Review hosted Windows/Linux/macOS results and deliberately authorize the release.
-   Pushing a valid version tag starts publication, including prereleases.
+These settings are external to the source tree; changing workflow files does not apply them.
 
-These settings and package ownership are external prerequisites; local checks do not
-configure or prove them. No long-lived NuGet API key is required by this workflow.
-Do not run publish-github-release.ps1 during local preparation: it is the publishing
-entry point, reserved for the tag workflow or an explicitly authorized publication.
+| Location | Required or recommended configuration |
+| --- | --- |
+| Settings → Rules → Rulesets | Create an active tag ruleset for v* restricting updates and deletions, with no routine bypass. If additional writers are invited, restrict tag creation to release maintainers in a separate ruleset so its creation bypass does not permit rewriting existing tags. |
+| Settings → Branches → main protection | Require Verify (ubuntu-latest) and Verify (windows-latest), and apply the protection to administrators. Keep force pushes/deletion disabled. macOS is not a required PR check because it runs on main/manual CI and releases. Independent review requires another maintainer; do not require an unavailable reviewer in a solo repository. |
+| Settings → Actions → General | Keep default workflow permissions read-only and PR approval by Actions disabled. Require full SHA pinning; allow the used actions/* and NuGet/login actions if limiting the allowed set. Keep approval for all external contributors' PR runs. |
+| Settings → Environments → nuget | Keep a Tag rule v*, not a Branch rule, and NUGET_USER as an environment variable containing the NuGet profile name. A required reviewer is optional protection against accidental publication. For a solo reviewer, do not enable Prevent self-review; it would block their own releases. Disable administrator bypass if approval is intended to be mandatory. |
+| Settings → Security features | Keep secret scanning and push protection enabled. Enable Dependabot alerts and security updates; version updates are configured in dependabot.yml. |
+| Settings → Releases | Keep Immutable releases disabled for this UI-first workflow. GitHub cannot attach files after an immutable release is published. An immutable-release process must upload files before publishing the release and needs a different trigger. |
+| NuGet.org → Trusted Publishing | Restrict the policy to owner DmitryGaravsky, repository Spdx.Expressions, workflow release.yml, environment nuget and package pattern Spdx.Expressions. Retain only the publishing scopes needed for this package; no stored API key is required. |
+| GitHub and NuGet account security | Confirm appropriate sign-in protection and review any existing long-lived keys or integrations separately. Workflow success does not establish their absence or scope. |
+
+Do not run publish-github-release.ps1 locally to publish implicitly. Its -CheckOnly mode
+is read-only but requires GitHub access. The publication entry point is reserved for the
+workflow or a separately authorized publication task.
 
 ## Failure and retry
 
 Use **Re-run failed jobs** while the original release artifact remains available.
 Do not rerun successful verification jobs to replace it. Re-running all jobs encounters
-the immutable artifact name; after artifact expiry, investigate and use a new reviewed
+the retained artifact name; after artifact expiry, investigate and use a new reviewed
 version rather than silently rebuilding the old release.
 
-NuGet push uses --skip-duplicate to resume after a successful prior push. That flag does
-not compare existing NuGet bytes; investigate a pre-existing version from another run.
-Package publication is irreversible here; a later GitHub failure does not roll it back.
+Before obtaining a NuGet key, the workflow checks the existing package URL. Only HTTP 404
+means absent; authorization, network and service failures stop the job. For an existing
+version it compares every ZIP entry name, length and SHA-256 against the retained artifact,
+rejecting missing, extra, duplicate or case-colliding entries. Only the root .signature.p7s
+is excluded because NuGet.org adds a repository signature. This compares package payloads;
+it is not a cryptographic signature-validation command.
 
-The GitHub publisher checks that the remote tag exists before changing a release, including
-when resuming an existing draft. Both draft creation and final publication use --verify-tag;
-a tag removed during uploading cannot be silently recreated by publication. See the
-[GitHub CLI edit contract](https://cli.github.com/manual/gh_release_edit).
-The publisher creates a draft, uploads the two files and publishes it. On retry it downloads and hashes existing assets before
-uploading anything missing from a draft. It rejects differing or unexpected assets and
-incomplete published releases without overwriting them. A matching published release is
-left unchanged. Prereleases are not marked latest.
+An identical existing version skips authentication and push. Different content fails
+without overwrite. New pushes do not use --skip-duplicate: if a version appears between
+the check and push, or NuGet accepted it but has not exposed it yet, the push fails safely.
+Wait for NuGet processing and rerun failed jobs so the existing payload can be verified.
 
-Hosted execution, authentication and publication remain unverified until actually run.
-See [verification status](testing.md#verification-status) for completed local checks.
+Before NuGet publication, the GitHub attachment check rejects conflicting/unexpected files,
+a missing release, wrong classification or an immutable release missing assets. Missing
+files in a mutable published release are allowed. The attachment job uploads only those
+files, never overwrites existing assets, and downloads the result to verify their hashes.
+Partial uploads can resume. Title, description, classification and latest selection are
+never edited by the workflow; release creation and deletion are not automated.
+
+NuGet publication is not rolled back by a later GitHub failure. A complete matching
+immutable release permits a read-only retry, but missing files cannot be added to it.
+
+The earlier tag-driven [v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
+passed on all three platforms and published the first package. That historical success
+does not validate this revised UI-triggered workflow. See [Testing](testing.md#verification-status)
+for local verification and the remaining hosted check.

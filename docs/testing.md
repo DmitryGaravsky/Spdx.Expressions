@@ -150,15 +150,19 @@ As of 2026-11-14, local Windows checks with SDK 10.0.404 selected by global.json
 | Documented example output against the development nupkg | 11 scenarios and 11 standalone programs passed |
 | Local package setup commands and standalone quick-start program | Passed with a fresh application and package cache |
 | Development package with external PackageReference consumers | Passed (0.1.0-dev) |
-| Offline release scripts | 24 scenarios passed; mocked GitHub CLI, no publication |
+| Offline release scripts | 46 scenarios passed; substituted GitHub/HTTP commands, no publication |
 | Tag-version release preparation | Not rerun for this update |
-| Build/release workflow actionlint validation | Not rerun for this update |
+| Build/release workflow actionlint validation | Passed with actionlint 1.7.12; Dependabot YAML syntax also checked |
+| Read-only release checks against v0.1.0 | Passed: tag/main ancestry, package commit, GitHub checksums and NuGet payload comparison |
 | Fresh CLI homes and required SDK environment guards | Passed |
 | User/machine PATH raw registry values and kinds | Unchanged |
-| Linux/macOS and GitHub-hosted CI | Not executed; unverified |
+| Revised UI-triggered workflow on GitHub | Not executed; hosted verification remains required |
 
 The completed pipeline used an explicit local feed for the pinned test dependencies.
-The package consumer used a separate local-only feed and fresh caches. Local success
-does not establish hosted or cross-platform success; the required Linux package check
-remains outstanding. Work reports and detailed historical analysis are not part of the
-published source tree and are not required to build, test or use the library.
+The package consumer used a separate local-only feed and fresh caches. The earlier
+[v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
+passed on Windows, Linux and macOS and published the package. Local success and that
+historical run do not establish hosted success for the revised UI-triggered workflow.
+The read-only checks downloaded existing public artifacts and did not modify either
+service. Work reports and detailed historical analysis are not part of the published
+source tree and are not required to build, test or use the library.
