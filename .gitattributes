@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.png binary
+*.bin binary
+# The pinned upstream bytes are evidence; never normalize their line endings.
+Spdx.Expressions/Data/*.json -text
+Spdx.Expressions/Data/UPSTREAM-*.md -text

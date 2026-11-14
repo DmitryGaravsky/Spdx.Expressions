@@ -1,0 +1,12 @@
+<Project DefaultTargets="CheckSdkEnvironment">
+  <!-- Inspect the child process environment, not MSBuild properties that callers could override. -->
+  <Target Name="CheckSdkEnvironment">
+    <Error Condition="$([System.Environment]::GetEnvironmentVariable('DOTNET_ADD_GLOBAL_TOOLS_TO_PATH')) != '0'" Text="Global tools PATH updates must be disabled." />
+    <Error Condition="$([System.Environment]::GetEnvironmentVariable('DOTNET_GENERATE_ASPNET_CERTIFICATE')) != 'false'" Text="Development certificate generation must be disabled." />
+    <Error Condition="$([System.Environment]::GetEnvironmentVariable('DOTNET_CLI_TELEMETRY_OPTOUT')) != '1'" Text="CLI telemetry must be disabled." />
+    <Error Condition="$([System.Environment]::GetEnvironmentVariable('DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE')) != 'true'" Text="Workload advertising updates must be disabled." />
+    <Error Condition="$([System.Environment]::GetEnvironmentVariable('DOTNET_NOLOGO')) != '1'" Text="Welcome output must be disabled." />
+    <Error Condition="$([System.Environment]::GetEnvironmentVariable('DOTNET_CLI_HOME')) == ''" Text="The verification run must specify its CLI home." />
+    <Message Importance="high" Text="SDK child-process environment guards verified." />
+  </Target>
+</Project>

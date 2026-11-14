@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../eng/Tests.props" />
+  <ItemGroup>
+    <ProjectReference Include="../Spdx.Expressions/Spdx.Expressions.csproj" />
+    <None Include="../Spdx.Expressions/Data/*" Link="Data/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

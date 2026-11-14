@@ -1,0 +1,25 @@
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+*.trx
+*.nupkg
+*.snupkg
+coverage/
+coverage.*
+
+# Local editor state and caches
+.vs/
+.idea/
+.cr/personal/
+*.user
+*.suo
+*.sln.docstates
+.nuget/
+.DS_Store
+Thumbs.db
+
+# Research belongs outside the product repository.
+[Rr]esearch/
+Spdx.Expressions.Research/
+design-*/

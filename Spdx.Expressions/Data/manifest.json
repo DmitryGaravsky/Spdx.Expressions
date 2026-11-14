@@ -1,0 +1,46 @@
+{
+  "repository": "https://github.com/spdx/license-list-data",
+  "tag": "v3.29.0",
+  "tagObject": "76c9a79bb7d2bf851143b76b3935a4d7cbaa644b",
+  "commit": "31ba1a50e5397e00a304dbadc76531740e89ee48",
+  "importDate": "2026-11-13",
+  "files": [
+    {
+      "file": "licenses.json",
+      "sourcePath": "json/licenses.json",
+      "licenseListVersion": "3.29.0",
+      "byteLength": 339359,
+      "sha256": "47d1cc681abe31166b342b6cc4aab13a6ba8ea5c48794697fe3bf8b1dbaf509a",
+      "entries": 740
+    },
+    {
+      "file": "exceptions.json",
+      "sourcePath": "json/exceptions.json",
+      "licenseListVersion": "3.29.0",
+      "byteLength": 41420,
+      "sha256": "59ee7c150de521d635cbf9367b8cf543b8da6781ea3ac1c073d305524f84ada2",
+      "entries": 86
+    }
+  ],
+  "notices": [
+    "UPSTREAM-README.md",
+    "UPSTREAM-XML-README.md",
+    "THIRD-PARTY-NOTICES.md (package root)"
+  ],
+  "noticeSources": [
+    {
+      "repository": "https://github.com/spdx/license-list-data",
+      "commit": "31ba1a50e5397e00a304dbadc76531740e89ee48",
+      "file": "UPSTREAM-README.md",
+      "sourcePath": "README.md",
+      "sha256": "9d5e2eaa0daa05418074f90201d1e320fd3792018fe1a2ffdc3ebf69c9fffc44"
+    },
+    {
+      "repository": "https://github.com/spdx/license-list-XML",
+      "commit": "b1dbeb5c8bca21af860a90e187f71d60b84a7a40",
+      "file": "UPSTREAM-XML-README.md",
+      "sourcePath": "README.md",
+      "sha256": "3f40eaff70b8ea2c30514d9e7c721b9d5785a214c00b2203aefa80e725626d7c"
+    }
+  ]
+}

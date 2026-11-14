@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Spdx.Expressions</PackageId>
+    <AssemblyName>Spdx.Expressions</AssemblyName>
+    <RootNamespace>Spdx.Expressions</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <Description>Offline SPDX 2.3.1 expression parsing, validation and source-preserving formatting.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data/*" />
+    <None Include="../README.md" Pack="true" PackagePath="/" />
+    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+    <None Update="Data/*" Pack="true" PackagePath="data/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

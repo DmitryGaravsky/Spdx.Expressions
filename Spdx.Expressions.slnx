@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Spdx.Expressions/Spdx.Expressions.csproj" />
+  <Project Path="Spdx.Expressions.Tests/Spdx.Expressions.Tests.csproj" />
+</Solution>
