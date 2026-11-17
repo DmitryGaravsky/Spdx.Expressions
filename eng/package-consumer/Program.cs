@@ -59,6 +59,29 @@ Check(reference.DocumentIdSpan!.Value.Start == 12 && reference.LicenseIdSpan.Sta
 Check(!SpdxExpressionValidator.Validate(Parse("LicenseRef-X"), registry).HasIdentifierErrors, "Reference-only result");
 Check(SpdxExpressionParser.Parse("NONE").Expression is null, "Sentinel rejected");
 Check(SpdxExpressionParser.Parse("MIT AND").Status == SpdxParseStatus.InvalidSyntax, "Syntax failure");
+// Independent precedence expectations from SPDX 2.3.1 Annex D.4.5:
+// https://spdx.github.io/spdx-spec/v2.3.1/SPDX-license-expressions/#d45-order-of-precedence-and-parentheses
+const string mixedInput = "MIT OR GPL-2.0+ WITH LLVM-exception AND Apache-2.0 OR BSD-3-Clause";
+var mixed = Parse(mixedInput);
+var choices = (SpdxOrExpression)mixed.Root;
+Check(choices.Operands.Count == 3, "Three ordered choices");
+Check(((SpdxLicenseExpression)choices.Operands[0]).Identifier == "MIT" && ((SpdxLicenseExpression)choices.Operands[2]).Identifier == "BSD-3-Clause", "Choice source order");
+var requirements = (SpdxAndExpression)choices.Operands[1];
+Check(requirements.Operands.Count == 2 && ((SpdxLicenseExpression)requirements.Operands[1]).Identifier == "Apache-2.0", "AND before OR");
+var exception = (SpdxWithExpression)requirements.Operands[0];
+var baseLicense = (SpdxLicenseExpression)exception.Operand;
+Check(baseLicense.Identifier == "GPL-2.0" && baseLicense.OrLater && exception.ExceptionIdentifier == "LLVM-exception", "Plus before WITH before AND");
+Check(SpdxExpressionFormatter.Format(mixed) == mixedInput, "Mixed precedence formatting");
+foreach(var (input, code, start, length) in new[] {
+    ("MIT wITh LLVM-exception", "SPDX_PARSE_EXPECTED_OPERATOR", 4, 4),
+    ("DocumentRef-D: LicenseRef-X", "SPDX_PARSE_INVALID_REFERENCE", 0, 14),
+    ("MIT AND \U0001F600-Unknown", "SPDX_PARSE_INVALID_CHARACTER", 8, 1)
+}) {
+    var rejected = SpdxExpressionParser.Parse(input);
+    Check(rejected.Status == SpdxParseStatus.InvalidSyntax && rejected.Expression is null && rejected.Diagnostics.Count == 1, "Profile rejection without partial AST");
+    var diagnostic = rejected.Diagnostics[0];
+    Check(diagnostic.Code == code && diagnostic.Span.Start == start && diagnostic.Span.Length == length, "Independent diagnostic and UTF-16 span");
+}
 var limit = SpdxExpressionParser.Parse("MIT", new() { MaxInputLength = 2 });
 Check(limit.Status == SpdxParseStatus.LimitExceeded && limit.Expression is null, "Budget failure");
 Cancelled(() => SpdxExpressionParser.Parse("MIT", cancellationToken: new(true)));
