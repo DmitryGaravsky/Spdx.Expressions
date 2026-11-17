@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using Spdx.Expressions.Internal;
 
 namespace Spdx.Expressions.Tests {
     public class ResourceTests {
@@ -124,6 +125,23 @@ namespace Spdx.Expressions.Tests {
             var registry = SpdxLicenseRegistry.Default;
             AssertCancellation(token => format ? SpdxExpressionFormatter.Format(expression, token) :
                 (object)SpdxExpressionValidator.Validate(expression, registry, new() { MaxDiagnostics = 1 }, token));
+        }
+        [TestCase(1)]
+        [TestCase(9)]
+        [TestCase(12)]
+        public void TraversalStopsBeforeNextStepWhenCancelled(int completedSteps) {
+            var expression = GrammarTests.Parse("(MIT WITH LLVM-exception OR ISC) AND LicenseRef-X");
+            using(var cancellation = new CancellationTokenSource())
+            using(var traversal = SyntaxTraversal.Walk(expression.Root, cancellation.Token).GetEnumerator()) {
+                // Suspend real traversal after root entry, a nested leaf, or between OR operands.
+                for(int step = 0; step < completedSteps; step++)
+                    Assert.That(traversal.MoveNext(), Is.True);
+                cancellation.Cancel();
+                var exception = Assert.Throws<OperationCanceledException>(() => {
+                    traversal.MoveNext();
+                });
+                Assert.That(exception!.CancellationToken, Is.EqualTo(cancellation.Token));
+            }
         }
         static void AssertCancellation(Func<CancellationToken, object> operation) {
             // Do not use Thread.Sleep: Windows timer granularity can let the entire operation finish.

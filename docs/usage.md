@@ -2,6 +2,26 @@
 
 [Overview](../README.md) · [API](api.md) · [Syntax](syntax.md) · [Catalogue](catalogue.md)
 
+## Install from NuGet
+
+The library is available as [Spdx.Expressions on NuGet.org](https://www.nuget.org/packages/Spdx.Expressions/)
+and targets net10.0 only. With the .NET 10 SDK, create a console application and install the package:
+
+```powershell
+dotnet new console --name SpdxExample --framework net10.0
+Set-Location SpdxExample
+dotnet add package Spdx.Expressions --source https://api.nuget.org/v3/index.json
+```
+
+Replace Program.cs with the [quick-start code](../README.md#get-started), then run:
+
+```powershell
+dotnet run
+```
+
+For an existing application, run the package installation command from its project directory.
+Package restore requires access to NuGet.org; library execution is offline.
+
 ## Run the examples
 
 From a source checkout with the .NET 10 SDK selected by global.json:
@@ -20,8 +40,7 @@ The [quick-start program](../README.md#get-started) covers successful parsing an
 
 ## Use a local package
 
-This project is an unpublished development package. From a checkout, use PowerShell 7 to
-build and verify a local package:
+To test changes from a source checkout, use PowerShell 7 to build and verify a local package:
 
 ```powershell
 ./eng/verify.ps1
