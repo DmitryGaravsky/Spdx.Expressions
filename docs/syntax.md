@@ -55,8 +55,11 @@ Stable diagnostic codes (English message wording is not a machine contract):
 | SPDX_ID_DEPRECATED | Known deprecated ID |
 
 Parser diagnostics use original UTF-16 spans; EOF can have length zero.
-An invalid supplementary Unicode character is reported at its first UTF-16 code unit,
-with length one. Parsing stops with one diagnostic and no partial AST or later evidence.
+When scanning reaches an invalid supplementary Unicode character, its diagnostic covers the
+first UTF-16 code unit with length one. An earlier structural failure takes precedence:
+`LicenseRef-` followed by an invalid character has an empty component, so INVALID_REFERENCE
+covers the prefix before that character. Parsing stops with one diagnostic and no partial AST
+or later evidence.
 The scanner classifies the next token before the parser checks its grammatical role.
 Invalid characters or token budgets discovered during that lookahead can therefore
 take precedence over a missing-operator error. Specific arbitration cases are frozen

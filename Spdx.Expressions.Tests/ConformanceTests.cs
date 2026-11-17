@@ -76,6 +76,17 @@ namespace Spdx.Expressions.Tests {
         public void DerivedGrammarFailures(string input, string code, int start, int length) {
             Reject(input, code, start, length);
         }
+        // Independent counterexamples retained after cross-parser comparison; peer output is not the oracle.
+        [TestCase("MIT WITHWITH LLVM-exception", "EXPECTED_OPERATOR", 4, 8, TestName = "D1_WithSubstringIsNotOperator")]
+        [TestCase("MIT WITH LLVM-exception ISC", "EXPECTED_OPERATOR", 24, 3, TestName = "D1_TrailingOperandAfterException")]
+        [TestCase("LicenseRef-@X", "INVALID_REFERENCE", 0, 11, TestName = "Profile_EmptyReferenceBeforeInvalidCharacter")]
+        [TestCase("LicenseRef-\u00e9", "INVALID_REFERENCE", 0, 11, TestName = "Profile_EmptyReferenceBeforeUnicodeLetter")]
+        [TestCase("LicenseRef-\U0001F600", "INVALID_REFERENCE", 0, 11, TestName = "Profile_EmptyReferenceBeforeSurrogatePair")]
+        [Property("Source", AnnexD + "#d1-overview")]
+        [Property("Profile", "Full consumption, whole operators and empty reference component arbitration; docs/syntax.md")]
+        public void ComparisonCounterexamples(string input, string code, int start, int length) {
+            Reject(input, code, start, length);
+        }
         // Reference colon adjacency is an explicit profile interpretation of D.1's contiguous license-ref production.
         [TestCase("DocumentRef-D :LicenseRef-X", "INVALID_REFERENCE", 0, 13, TestName = "Profile_WhitespaceBeforeReferenceColon")]
         [TestCase("DocumentRef-D: LicenseRef-X", "INVALID_REFERENCE", 0, 14, TestName = "Profile_WhitespaceAfterReferenceColon")]
@@ -108,6 +119,7 @@ namespace Spdx.Expressions.Tests {
         }
         [TestCase("ANDROID OR ORACLE AND WITH-extra", "O(L:ANDROID,A(L:ORACLE,L:WITH-extra))", TestName = "Profile_KeywordsAreWholeTokens")]
         [TestCase("DocumentRef-.:LicenseRef--", "R:.:-", TestName = "D1_PunctuationReferenceComponents")]
+        [TestCase("LicenseRef", "L:LicenseRef", TestName = "Profile_ReferencePrefixRequiresHyphen")]
         [Property("Source", AnnexD + "#d1-overview")]
         [Property("Profile", "Identifier candidates and reserved whole tokens; docs/syntax.md")]
         public void IdentifierAndKeywordBoundaries(string input, string expected) {

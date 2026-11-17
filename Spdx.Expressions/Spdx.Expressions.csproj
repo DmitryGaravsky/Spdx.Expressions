@@ -9,6 +9,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Spdx.Expressions.Tests" />
     <EmbeddedResource Include="Data/*" />
     <None Include="../LICENSE" Pack="true" PackagePath="/" />
     <None Include="../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />

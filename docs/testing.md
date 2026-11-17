@@ -52,6 +52,21 @@ long fuzzing campaign or complete security audit.
 Mutation coverage assertions require all four seed expressions, all three operations per
 seed, every mutation character (including NUL and a surrogate), and insertion at EOF.
 
+Six additional robustness cases exercise long mixed AND/OR chains, late reference/exception
+and error evidence after diagnostic truncation, and exact EOF failures after long chains.
+A separate bounded package study passed 4,096 independently constructed expressions,
+20,000 seeded mutations, 65,464 disallowed UTF-16 code units at a fixed token boundary,
+and 13 large-input/budget cases. Those study inputs are not additional NUnit cases or a CI
+dependency. Same-build timing/allocation controls provide a local exploratory baseline,
+not a performance threshold, cross-platform result or exhaustive fuzzing claim.
+
+Three deterministic cancellation cases suspend the shared traversal enumerator after
+root entry, a nested leaf, and between OR operands. Cancellation must make the next
+MoveNext throw before yielding more work, with the original token. The test assembly
+alone receives internal access; no public traversal API is added. Removing the in-loop
+cancellation check in an isolated copy makes all three cases fail. Existing public-operation
+cancellation tests remain smoke coverage; they do not independently prove polling latency.
+
 Preserve the exact package/hash and failed evidence when changing a candidate.
 A prepared workflow/script is not proof of a passing Windows/Linux/macOS run.
 
@@ -74,13 +89,13 @@ Existing fixtures remain the authority for already covered boundaries:
 | --- | --- |
 | D.1/D.3 simple licenses and adjacent plus | ConformanceTests.SimpleExamples; GrammarTests.IndependentFailures rejects separated/repeated plus and suffixes on references/exceptions; DerivedGrammarFailures adds tab separation and grouped suffixes. |
 | D.1 reference components | SimpleExamples, IdentifierAndKeywordBoundaries and GrammarTests.IndependentStructures cover local/document references, punctuation and reserved words inside components; ReferenceBoundaries and IndependentFailures cover empty/malformed components and prefixes. |
-| D.1 operator boundaries and complete consumption | IndependentStructures accepts parentheses as AND/OR separators; IndependentFailures covers WITH spacing, comments, declarations and trailing prose; DerivedGrammarFailures adds missing/repeated OR, adjacent groups and mixed missing operands. |
+| D.1 operator boundaries and complete consumption | IndependentStructures accepts parentheses as AND/OR separators; IndependentFailures covers WITH spacing, comments, declarations and trailing prose; DerivedGrammarFailures adds missing/repeated OR, adjacent groups and mixed missing operands; ComparisonCounterexamples rejects operator substrings and trailing operands after WITH. |
 | D.2 operator case | OperatorsAreCaseSensitive and IndependentFailures reject lowercase/mixed-case operators; uppercase operators appear in every successful composite fixture. |
 | D.2 identifier case | D2_CatalogueMatchingPreservesOriginalEvidence checks mixed license/exception case, canonical lookup and original spans; RegistryTests.ConcurrentCultureIndependentOperations covers culture/concurrency. |
 | D.4.2/D.4.3 binary operators and source order | DisjunctionExamples and ConjunctionExamples cover both orders and three operands; IndependentStructures preserves duplicates and explicit groups; DerivedStructures covers grouped OR chains. |
 | D.4.4 WITH operand kinds | D44_ExceptionExample and IndependentStructures cover license, plus and reference operands; IndependentFailures/DerivedGrammarFailures reject repeated WITH, grouped left operands, grouped exceptions and reference exceptions. |
 | D.4.5 precedence | PrecedenceExamples checks the published pair; DerivedStructures combines all four precedence levels, conjunctions on both sides of OR and group overrides. |
-| Profile: reference casing and colon adjacency | IndependentStructures treats lowercase prefixes as ordinary candidates; IndependentFailures rejects malformed recognized prefixes; ReferenceBoundaries rejects space/tab around the colon. |
+| Profile: reference casing and colon adjacency | IndependentStructures treats lowercase prefixes as ordinary candidates; IdentifierAndKeywordBoundaries requires the prefix's hyphen; IndependentFailures rejects malformed recognized prefixes; ReferenceBoundaries rejects space/tab around the colon; ComparisonCounterexamples pins empty-component arbitration before invalid characters. |
 | Profile: whitespace, Unicode and UTF-16 evidence | Profile_WhitespaceDoesNotApplyTagValueLineRestrictions accepts space/TAB/CR/LF; InvalidCharactersStopBeforeLaterEvidence rejects other whitespace and surrogate pairs; IndependentFailures covers NBSP/NUL/lone surrogates; ExactNodeAndComponentSpans pins node/component coordinates and failure cases pin EOF. |
 | Profile: document sentinels and whole tokens | FieldSentinelsAreNotExpressions and IndependentFailures reject NONE/NOASSERTION in ID positions; IndependentStructures accepts lowercase candidates/reference components; IdentifierAndKeywordBoundaries accepts longer identifiers containing keywords. |
 | Profile: parsing versus catalogue validation | Profile_IdentifierCandidatesDoNotRequireCatalogueMembership accepts unknown syntax then checks unknown license/exception diagnostics and unresolved references; ValidationTests covers known/unknown/wrong-kind/deprecated IDs, occurrence order and independent truncation flags. |
@@ -101,9 +116,21 @@ Interpretation boundaries are deliberate:
   equivalence, license compatibility and legal conclusions are outside these tests.
 
 The real PackageReference consumer checks a representative precedence and rejection subset
-against the exact nupkg. This bounded corpus is neither an exhaustive proof nor a comparison
-with other parsers. Hosted verification must run on the actual candidate independently of
+against the exact nupkg. These specification-derived fixtures alone do not prove exhaustive
+conformance or agreement with other parsers. Hosted verification must run on the actual candidate independently of
 local results.
+
+A bounded 68-input comparison on Windows used spdx-expression-parse 5.0.0 with
+spdx-license-ids 3.0.24 / spdx-exceptions 2.5.0, and Tethys.SPDX.ExpressionParser 2.2.0
+with Default options and case-insensitive lookup callbacks over the same 3.29.0 catalogue
+used here. This library matched the independently specified outcomes for all 68 inputs.
+ComparisonCounterexamples retains additional full-consumption and diagnostic-arbitration
+fixtures. No production behavior changed. Peers differ in catalogue checks, casing,
+whitespace, references and error handling; their acceptance is not this profile's contract.
+The common AST comparison retained operator order, plus, WITH and leaf spelling, removing
+only explicit group wrappers and flattening same-operator chains. Full source/group/span
+contracts remain checked independently. This comparison is not a performance or security
+assessment; external comparator tools are not product dependencies.
 
 ## Documentation and runnable examples
 
@@ -185,15 +212,41 @@ repository or available public resources.
 Generated output paths in these instructions describe files created by a local run;
 they are not links to files shipped in the repository.
 
+## Q1 readiness
+
+As of 2026-11-17, the bounded Q1 implementation and local verification are complete.
+The final review's confirmed cancellation coverage gap is resolved; no confirmed local
+review finding remains open. This status covers the following scope:
+
+| Area | Delivered and verified |
+| --- | --- |
+| Q1a: specification conformance | Annex D coverage map, explicit profile decisions and independent fixtures; 58 conformance cases including the Q1b additions. |
+| Q1b: differential pilot | 68 inputs against pinned JavaScript and .NET parsers; every observed difference classified and six boundary fixtures retained. |
+| Q1c: bounded robustness | Generated, mutation, UTF-16 and large-input campaigns completed; six additional robustness cases included in the normal suite. |
+| Q1c: performance baseline | Same-build timing/allocation and first-use observations recorded with their noise limits; no performance threshold or SLA asserted. |
+| Final review: cancellation | Three deterministic traversal checks pass; removal of the in-loop token check makes all three fail in an isolated copy. |
+| Combined local verification | Full Windows pipeline passed with 194 NUnit cases in both Debug and Release, actual package consumers, examples and documentation checks. |
+
+Final merge acceptance still requires the combined Q1b/Q1c/cancellation follow-up and
+this documentation to be committed to PR #4, followed by successful Ubuntu/Windows checks
+on that candidate and final review. The observed successful PR run at e4df39e covers Q1a
+only. macOS is a main/manual job, not an additional PR requirement. Local completion does
+not establish hosted success for later changes.
+
+Long coverage-guided fuzzing, cross-platform performance calibration and hostile-input
+tests for future catalogue-loading or reference-resolution features remain separate work.
+They are not unfinished requirements of this bounded Q1 scope. Q1 does not certify
+exhaustive conformance, security, a stable 1.0 API or a new package release.
+
 ## Verification status
 
-As of 2026-11-14, local Windows checks with SDK 10.0.404 selected by global.json passed:
+As of 2026-11-17, local Windows checks with SDK 10.0.404 selected by global.json passed:
 
 | Check | Result |
 | --- | --- |
 | Debug and Release compilation | Passed; zero warnings and errors |
-| Debug NUnit | 179 passed, 0 failed, 0 skipped; includes 52 conformance cases |
-| Release NUnit | 179 passed, 0 failed, 0 skipped; includes 52 conformance cases |
+| Debug NUnit | 194 passed, 0 failed, 0 skipped; includes 58 conformance, 6 additional robustness and 3 deterministic cancellation cases |
+| Release NUnit | 194 passed, 0 failed, 0 skipped; includes 58 conformance, 6 additional robustness and 3 deterministic cancellation cases |
 | Solution and consumer formatting | Passed |
 | Documentation links and source blocks | 73 relative links and 11 example programs passed |
 | Documentation checker fixtures | 21 scenarios passed |
@@ -206,13 +259,18 @@ As of 2026-11-14, local Windows checks with SDK 10.0.404 selected by global.json
 | Read-only release checks against v0.1.0 | Previously passed; not rerun for conformance changes |
 | Fresh CLI homes and required SDK environment guards | Passed |
 | User/machine PATH raw registry values and kinds | Unchanged |
-| Conformance candidate and revised UI-triggered workflow on GitHub | Not executed; hosted verification remains required |
+| Q1a pull-request checks at e4df39e | Passed on Ubuntu and Windows, the configured PR matrix; macOS runs on main/manual dispatch |
+| Combined Q1b/Q1c/cancellation follow-up on GitHub | Pending commit/push and the resulting candidate's PR checks; local completion is recorded above |
+| Revised UI-triggered release workflow on GitHub | Not executed for this update; a separate release check, not evidence of Q1 PR acceptance |
 
 The completed pipeline used an explicit local feed for the pinned test dependencies.
 The package consumer used a separate local-only feed and fresh caches. The earlier
 [v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
 passed on Windows, Linux and macOS and published the package. Local success and that
 historical run do not establish hosted success for the revised UI-triggered workflow.
+The Q1a pull-request result is independently recorded in the
+[PR build run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43606334429);
+it does not cover the subsequent Q1b/Q1c/cancellation test and documentation changes.
 The read-only checks downloaded existing public artifacts and did not modify either
 service. Work reports and detailed historical analysis are not part of the published
 source tree and are not required to build, test or use the library.
