@@ -10,11 +10,11 @@ Spdx.Expressions is a standalone net10.0 library implementing Parse, Validate an
 for the fixed SPDX-2.3.1 expression profile. It preserves immutable source evidence and
 supports the pinned offline SPDX v3.29.0 catalogue and caller-selected UTF-8 catalogue
 pairs loaded from memory or streams. It has no runtime NuGet dependencies and no
-dependency on Font.Metadata, CLI, font or SBOM models.
+dependency on application-specific readers, CLI or SBOM models.
 
 Work directly in this repository for authorized tasks. Integration, external consumers,
 reference resolution, serialization, automatic updates and
-publication require their own tasks. Font.Metadata testing is independent of this project.
+publication require their own tasks. External consumer testing is independent of this project.
 
 ## Git ownership
 

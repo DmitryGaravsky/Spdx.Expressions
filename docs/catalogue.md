@@ -27,6 +27,10 @@ not an empty catalogue or a user-input error.
 Updating the embedded snapshot is a manual development task. Import both exact
 files from one reviewed commit, update the manifest and pinned hashes, review
 notices, and rerun all entry/hash/package checks.
+Within 1.x, embedded catalogue updates require a minor release and an explicit
+change summary; patch releases retain the same bytes. Use a caller-selected pair
+when results must stay tied to one dataset across upgrades. See the
+[compatibility policy](compatibility.md#catalogue-updates-and-reproducibility).
 
 `TryGetLicense` and `TryGetException` use separate namespaces. They do not trim whitespace
 or apply aliases. A failed lookup returns false and a null entry. A null identifier throws

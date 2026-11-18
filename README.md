@@ -100,11 +100,12 @@ Unresolved references: False
 Diagnostics truncated: False
 ```
 
-The quick start works with the published 0.1.0 package. Run the
+The quick start also works with 0.1.0. The
 [catalogue loader](docs/usage.md#load-a-selected-catalogue-from-memory),
 [AST traversal](docs/usage.md#collect-license-and-reference-occurrences) and
-[canonical casing](docs/usage.md#apply-the-selected-catalogues-casing) examples from
-this checkout or a verified local package until a release includes these APIs.
+[canonical casing](docs/usage.md#apply-the-selected-catalogues-casing) APIs are
+available starting with **1.0.0** and are absent from 0.1.0. See the
+[1.x compatibility policy](docs/compatibility.md) for API stability and catalogue updates.
 
 ## Documentation
 
@@ -114,6 +115,7 @@ this checkout or a verified local package until a release includes these APIs.
 | [API guide](docs/api.md) | Operations, result flags, AST and source evidence |
 | [Syntax reference](docs/syntax.md) | Grammar policies, diagnostic codes, limits and cancellation |
 | [Catalogues](docs/catalogue.md) | Embedded snapshot, caller-selected schema, lookup and dataset identity |
+| [Compatibility](docs/compatibility.md) | Stable 1.x contracts, additive changes and catalogue update policy |
 
 For development, see [Contributing](CONTRIBUTING.md), [Architecture](docs/architecture.md),
 [Testing](docs/testing.md), [CI](docs/ci.md) and [Release](docs/release.md).
