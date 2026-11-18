@@ -20,7 +20,10 @@ dotnet run
 ```
 
 For an existing application, run the package installation command from its project directory.
-Package restore requires access to NuGet.org; library execution is offline.
+Package restore requires access to NuGet.org. Library execution is offline.
+The quick start works with the published 0.1.0 package. The catalogue loading, traversal
+and canonical casing examples require this checkout or a verified
+[local package](#use-a-local-package) until a release includes these APIs.
 
 ## Run the examples
 
@@ -97,7 +100,7 @@ SPDX_PARSE_EXPECTED_OPERAND: start=7, length=0
 
 ## Distinguish syntax from catalogue membership
 
-Scenario: `unknown-id`. Identifier-shaped tokens can parse even when the pinned catalogue does not contain them.
+Scenario: `unknown-id`. Identifier-shaped tokens can parse even when the selected catalogue lacks them.
 Use validation flags for outcomes and codes for machine-readable diagnostics.
 
 <!-- example: unknown-id -->
@@ -233,6 +236,32 @@ Original: ' ( mit  OR Apache-2.0 ) AND MIT '
 Formatted: '(mit OR Apache-2.0) AND MIT'
 ```
 
+## Apply the selected catalogue's casing
+
+Scenario `canonical-casing` uses the same AST for spelling-preserving formatting
+and catalogue-specific casing. This API is available from the current source or a
+local package until it ships in a release. Pass the registry you want to use.
+
+<!-- example: canonical-casing -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var parsed = SpdxExpressionParser.Parse(" ( mit+ WITH llvm-exception ) OR LicenseRef-MiT ");
+if(parsed.Expression is not { } expression)
+    return;
+var registry = SpdxLicenseRegistry.Default;
+Console.WriteLine(SpdxExpressionFormatter.Format(expression));
+Console.WriteLine(SpdxExpressionFormatter.FormatCanonicalCasing(expression, registry));
+```
+
+Expected output:
+
+```text
+(mit+ WITH llvm-exception) OR LicenseRef-MiT
+(MIT+ WITH LLVM-exception) OR LicenseRef-MiT
+```
+
 ## Diagnostic storage does not limit evidence
 
 Scenario: `diagnostic-budget`. With one stored message, the first deprecation warning fills the budget. The later unknown
@@ -333,7 +362,8 @@ SPDX_PARSE_LIMIT_EXCEEDED
 ## Handle cancellation separately
 
 Scenario: `cancellation`. This already-cancelled token makes the example deterministic. In an application,
-pass the operation's cancellation token; Parse, Validate and Format all accept one.
+pass the operation's cancellation token. Parse, Validate, Format and FormatCanonicalCasing
+all accept one.
 Cancellation throws rather than returning InvalidSyntax or a partial result.
 
 <!-- example: cancellation -->
@@ -354,4 +384,149 @@ Expected output:
 
 ```text
 Cancelled: no parse result
+```
+
+## Load a selected catalogue from memory
+
+Run the `load-memory` scenario. The two byte arrays form a synthetic pair.
+The example passes the loaded registry
+directly to validation and reads its declared version from the validation result.
+
+<!-- example: load-memory -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var licenses = """{"licenseListVersion":"selected-1","licenses":[{"licenseId":"S1-Retired","isDeprecatedLicenseId":true},{"licenseId":"S1-Custom","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+var exceptions = """{"licenseListVersion":"selected-1","exceptions":[{"licenseExceptionId":"S1-Flip","isDeprecatedLicenseId":true},{"licenseExceptionId":"S1-Exception","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+var loaded = SpdxLicenseRegistry.Load(licenses, exceptions);
+if(loaded.Registry is not { } registry) {
+    var diagnostic = loaded.Diagnostics[0];
+    Console.WriteLine($"{loaded.Status}: {diagnostic.Code} in {diagnostic.Input} at byte {diagnostic.ByteOffset}");
+    return;
+}
+var parsed = SpdxExpressionParser.Parse("s1-custom WITH S1-Exception OR Apache-2.0");
+var expression = parsed.Expression ?? throw new InvalidOperationException("Invalid expression.");
+var validated = SpdxExpressionValidator.Validate(expression, registry);
+Console.WriteLine($"{validated.RegistryIdentity.LicenseListVersion} {validated.HasIdentifierErrors}");
+foreach(var occurrence in validated.IdentifierOccurrences)
+    Console.WriteLine($"{occurrence.Role} {occurrence.Identifier} {occurrence.LookupStatus}");
+```
+
+Expected output:
+
+```text
+selected-1 True
+License s1-custom Known
+Exception S1-Exception Known
+License Apache-2.0 Unknown
+```
+
+## Load a catalogue from streams
+
+Run the `load-stream` scenario. The example uses memory-backed streams so it can run on its own. To read an existing
+pair, open each file with `File.OpenRead` and pass the two streams to the same
+overload. The caller disposes the streams. Inspect the result status and structured
+diagnostic fields to distinguish invalid data from a caller-configured limit.
+
+<!-- example: load-stream -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var licenses = """{"licenseListVersion":"local","licenses":[{"licenseId":"MIT","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+var exceptions = """{"licenseListVersion":"local","exceptions":[{"licenseExceptionId":"LLVM-exception","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+foreach(var (exceptionsBytes, options) in new (byte[], SpdxRegistryLoadOptions?)[] {
+    (exceptions, null),
+    ("{}"u8.ToArray(), null),
+    (exceptions, new() { MaxInputBytes = 8 })
+}) {
+    using(var licenseStream = new System.IO.MemoryStream(licenses))
+    using(var exceptionStream = new System.IO.MemoryStream(exceptionsBytes)) {
+        var loaded = SpdxLicenseRegistry.Load(licenseStream, exceptionStream, options);
+        if(loaded.Registry is { } registry) {
+            Console.WriteLine($"{loaded.Status}: {registry.Identity.LicenseListVersion}, {registry.Licenses.Count} license, {registry.Exceptions.Count} exception");
+        }
+        else {
+            var diagnostic = loaded.Diagnostics[0];
+            Console.WriteLine($"{loaded.Status}: {diagnostic.Code} in {diagnostic.Input} at byte {diagnostic.ByteOffset}; {diagnostic.LimitName ?? diagnostic.PropertyName}");
+        }
+    }
+}
+```
+
+Expected output:
+
+```text
+Success: local, 1 license, 1 exception
+InvalidData: SPDX_REGISTRY_MISSING_PROPERTY in Exceptions at byte 1; licenseListVersion
+LimitExceeded: SPDX_REGISTRY_LIMIT_EXCEEDED in Licenses at byte 8; MaxInputBytes
+```
+
+## Collect license and reference occurrences
+
+Scenario: `enumerate-nodes`. Enumerate the original syntax nodes to report exact
+source slices, including repeated license occurrences, without a registry.
+Use enumeration for a simple loop, or the [typed walker](#inspect-groups-and-exceptions)
+to organize handling by node kind. Use validation's occurrence lists when you need
+catalogue lookup results; a WITH exception is a field on its node, not a separate node.
+
+<!-- example: enumerate-nodes -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var parsed = SpdxExpressionParser.Parse(" mit+ WITH eX OR LicenseRef-X OR mit+ ");
+if(parsed.Expression is not { } expression)
+    return;
+foreach(var node in expression.Root.EnumerateNodes()) {
+    if(node is SpdxLicenseExpression or SpdxReferenceExpression) {
+        var span = node.Span;
+        string source = expression.SourceText.Substring(span.Start, span.Length);
+        Console.WriteLine($"{node.Kind} {source} @{span.Start}");
+    }
+}
+```
+
+Expected output:
+
+```text
+License mit+ @1
+Reference LicenseRef-X @17
+License mit+ @33
+```
+
+## Inspect groups and exceptions
+
+Scenario: `inspect-structure`. The walker visits every node; this inspector
+handles only explicit groups and WITH expressions. A WITH callback receives
+the exception identifier and its source span on the WITH node.
+
+<!-- example: inspect-structure -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var parsed = SpdxExpressionParser.Parse("(MIT WITH eX) AND (LicenseRef-X OR ISC)");
+if(parsed.Expression is not { } expression)
+    return;
+var inspection = new StructureInspection();
+inspection.Walk(expression.Root);
+
+sealed class StructureInspection : SpdxExpressionWalker {
+    protected override void VisitGroup(SpdxGroupExpression node) {
+        Console.WriteLine($"Group {node.Span.Start}, length {node.Span.Length}");
+    }
+    protected override void VisitWith(SpdxWithExpression node) {
+        Console.WriteLine($"Exception {node.ExceptionIdentifier} @{node.ExceptionSpan.Start}");
+    }
+}
+```
+
+Expected output:
+
+```text
+Group 0, length 13
+Exception eX @10
+Group 18, length 21
 ```

@@ -90,6 +90,12 @@ function Test-DocumentExamples {
     $source = [IO.File]::ReadAllText("$Root/Spdx.Expressions.Examples/Program.cs").Replace("`r`n", "`n")
     $examples = @(Get-DocumentExamples $Root)
     $regions = [regex]::Matches($source, '(?ms)^\s*#region ([a-z-]+)\n(.*?)^\s*#endregion')
+    $helpers = [regex]::Matches($source, '(?ms)^ *#region helper ([a-z-]+)\n(.*?)^ *#endregion')
+    foreach ($helper in $helpers) {
+        if ($helper.Groups[1].Value -cnotin $examples.Name) {
+            throw "Helper region has no documented example: $($helper.Groups[1].Value)"
+        }
+    }
     if ($examples.Count -eq 0 -or $regions.Count -ne $examples.Count -or
         @($examples.Name | Select-Object -Unique).Count -ne $examples.Count) {
         throw 'Every example must have one source region, one documented program and one expected output.'
@@ -100,6 +106,14 @@ function Test-DocumentExamples {
             throw "Missing or duplicated example region: $($example.Name)"
         }
         $body = [regex]::Replace($region[0].Groups[2].Value.TrimEnd(), '(?m)^ {12}', '')
+        $helper = @($helpers | Where-Object { $_.Groups[1].Value -ceq $example.Name })
+        if ($helper.Count -gt 1) {
+            throw "Duplicate helper region: $($example.Name)"
+        }
+        if ($helper.Count -eq 1) {
+            $helperCode = [regex]::Replace($helper[0].Groups[2].Value.TrimEnd(), '(?m)^ {8}', '')
+            $body += "`n`n$helperCode"
+        }
         $expectedCode = "using System;`nusing Spdx.Expressions;`n`n$body"
         if ($example.Code -cne $expectedCode) {
             throw "Documented code differs from runnable source: $($example.Name)"

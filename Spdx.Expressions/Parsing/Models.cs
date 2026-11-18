@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Threading;
+using Spdx.Expressions.Internal;
 
 namespace Spdx.Expressions {
     /// <summary>A zero-based range measured in UTF-16 code units.</summary>
@@ -109,14 +111,15 @@ namespace Spdx.Expressions {
         internal SpdxParseResult(SpdxParseStatus status, SpdxParsedExpression? expression, SpdxDiagnostic? diagnostic) {
             Status = status;
             Expression = expression;
-            Diagnostics = diagnostic is null ? ReadOnlyCollection<SpdxDiagnostic>.Empty : Array.AsReadOnly(new[] { diagnostic });
+            if(diagnostic is not null)
+                Diagnostics = [diagnostic];
         }
         /// <summary>Gets the syntax/budget outcome.</summary>
         public SpdxParseStatus Status { get; }
         /// <summary>Gets the expression only on success.</summary>
         public SpdxParsedExpression? Expression { get; }
         /// <summary>Gets no messages on success, or one primary diagnostic on failure.</summary>
-        public IReadOnlyList<SpdxDiagnostic> Diagnostics { get; }
+        public IReadOnlyList<SpdxDiagnostic> Diagnostics { get; } = ReadOnlyCollection<SpdxDiagnostic>.Empty;
     }
     /// <summary>An immutable expression retaining the caller's original string and explicit groups.</summary>
     public sealed class SpdxParsedExpression {
@@ -141,6 +144,27 @@ namespace Spdx.Expressions {
         public SpdxExpressionKind Kind { get; }
         /// <summary>Gets the range from first through last token, including internal whitespace.</summary>
         public SpdxSourceSpan Span { get; }
+        /// <summary>Enumerates this node and all its descendants in depth-first pre-order.</summary>
+        /// <param name="cancellationToken">Cancellation observed as the enumerator advances.</param>
+        /// <returns>A lazy sequence of the original nodes, visiting each node's children in source order.</returns>
+        /// <remarks>
+        /// Calling this method or obtaining an enumerator performs no traversal or
+        /// cancellation check. Each enumeration starts at this node. A WITH exception
+        /// remains a field of its node.
+        /// Disposing an enumerator ends that enumeration without visiting further nodes or
+        /// checking cancellation. Nodes already yielded remain available.
+        /// </remarks>
+        /// <exception cref="OperationCanceledException">
+        /// The supplied token was canceled before or during an advance, including the advance to completion.
+        /// </exception>
+        public IEnumerable<SpdxExpressionNode> EnumerateNodes(CancellationToken cancellationToken = default) {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach(var (node, phase) in SyntaxTraversal.Walk(this, cancellationToken)) {
+                if(phase == SyntaxTraversal.Enter)
+                    yield return node;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+        }
     }
     /// <summary>A license candidate; parsing does not require catalogue membership.</summary>
     public sealed class SpdxLicenseExpression : SpdxExpressionNode {
@@ -193,7 +217,7 @@ namespace Spdx.Expressions {
     /// <summary>An uninterrupted conjunction of at least two operands in source order.</summary>
     public sealed class SpdxAndExpression : SpdxExpressionNode {
         internal SpdxAndExpression(List<SpdxExpressionNode> operands, SpdxSourceSpan span) : base(SpdxExpressionKind.And, span) {
-            Operands = Array.AsReadOnly(operands.ToArray());
+            Operands = [.. operands];
         }
         /// <summary>Gets the ordered operands; explicit groups remain separate nodes.</summary>
         public IReadOnlyList<SpdxExpressionNode> Operands { get; }
@@ -201,7 +225,7 @@ namespace Spdx.Expressions {
     /// <summary>An uninterrupted disjunction of at least two operands in source order.</summary>
     public sealed class SpdxOrExpression : SpdxExpressionNode {
         internal SpdxOrExpression(List<SpdxExpressionNode> operands, SpdxSourceSpan span) : base(SpdxExpressionKind.Or, span) {
-            Operands = Array.AsReadOnly(operands.ToArray());
+            Operands = [.. operands];
         }
         /// <summary>Gets the ordered operands; explicit groups remain separate nodes.</summary>
         public IReadOnlyList<SpdxExpressionNode> Operands { get; }

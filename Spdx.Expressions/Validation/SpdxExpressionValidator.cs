@@ -6,10 +6,10 @@ using Spdx.Expressions.Internal;
 namespace Spdx.Expressions {
     /// <summary>Checks identifier namespaces and reports every occurrence without resolving references.</summary>
     public static class SpdxExpressionValidator {
-        const string UnknownLicense = "The license identifier is absent from the pinned catalogue.";
-        const string UnknownException = "The exception identifier is absent from the pinned catalogue.";
+        const string UnknownLicense = "The license identifier is absent from the supplied catalogue.";
+        const string UnknownException = "The exception identifier is absent from the supplied catalogue.";
         const string WrongKind = "The identifier belongs only to the other catalogue namespace.";
-        const string Deprecated = "The identifier is deprecated in the pinned catalogue; its spelling is preserved.";
+        const string Deprecated = "The identifier is deprecated in the supplied catalogue; its spelling is preserved.";
         /// <summary>Visits the complete AST even after exhausting the diagnostic storage budget.</summary>
         /// <param name="expression">A successfully parsed expression.</param>
         /// <param name="registry">The explicit immutable catalogue to use.</param>

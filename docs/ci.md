@@ -7,7 +7,9 @@ macOS. Feature-branch pushes do not add duplicate PR verification.
 Each job installs the SDK declared in global.json using
 [setup-dotnet's global-json-file input](https://github.com/actions/setup-dotnet/blob/main/action.yml)
 and executes the same eng/verify.ps1 pipeline as local development, including documentation
-links/snippets, documentation fixtures and runnable examples against the packed library:
+links/snippets, documentation fixtures and runnable examples against the packed library.
+The isolated package consumer loads a synthetic catalogue pair from files through both
+overloads and checks its hashes and validation results alongside the embedded snapshot.
 
 ```text
 Docs + offline script tests ──→ Restore ──→ Debug/Release tests

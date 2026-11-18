@@ -16,7 +16,8 @@ with isolated package/HTTP/CLI caches and a local-only feed. SDK first-run PATH 
 are explicitly disabled; a successful consumer check also requires unchanged user and
 machine PATH raw registry values, value existence and registry value kinds on Windows.
 The process PATH is checked too. Non-Windows runs mark persistent registry checks as
-not applicable. No internal access is used.
+not applicable. The consumer exercises public node enumeration and walker
+cancellation, and compiles both documented traversal examples against the package.
 Each invocation retains its package, logs and run.json under a unique
 `artifacts/verification/<run-id>` directory, including failed runs. The mutable
 `artifacts/latest-verification.json` pointer identifies the latest run and its status.
@@ -63,7 +64,8 @@ not a performance threshold, cross-platform result or exhaustive fuzzing claim.
 Three deterministic cancellation cases suspend the shared traversal enumerator after
 root entry, a nested leaf, and between OR operands. Cancellation must make the next
 MoveNext throw before yielding more work, with the original token. The test assembly
-alone receives internal access; no public traversal API is added. Removing the in-loop
+alone receives internal access for these checks; no public test hook is needed.
+The public enumeration and walker have their own coverage below. Removing the in-loop
 cancellation check in an isolated copy makes all three cases fail. Existing public-operation
 cancellation tests remain smoke coverage; they do not independently prove polling latency.
 
@@ -100,6 +102,7 @@ Existing fixtures remain the authority for already covered boundaries:
 | Profile: document sentinels and whole tokens | FieldSentinelsAreNotExpressions and IndependentFailures reject NONE/NOASSERTION in ID positions; IndependentStructures accepts lowercase candidates/reference components; IdentifierAndKeywordBoundaries accepts longer identifiers containing keywords. |
 | Profile: parsing versus catalogue validation | Profile_IdentifierCandidatesDoNotRequireCatalogueMembership accepts unknown syntax then checks unknown license/exception diagnostics and unresolved references; ValidationTests covers known/unknown/wrong-kind/deprecated IDs, occurrence order and independent truncation flags. |
 | Profile: source-preserving formatting | FormattingTests.IndependentGoldenOutputs and Profile_WhitespaceDoesNotApplyTagValueLineRestrictions specify literal outputs; examples and DerivedStructures preserve casing, plus, groups and order. |
+| Profile: explicit catalogue casing | CanonicalFormattingTests checks fixed goldens with embedded and selected registries, source evidence and structural roundtrip, legacy plus lookup, culture, wide chains, depth and long text. The actual package consumer uses both external load paths and the embedded registry. |
 | Profile: budgets and cancellation | ResourceTests covers inclusive limits, exact limit spans, long chains and cancellation during scanning/traversal; these are engineering contracts, not Annex D rules. |
 
 Interpretation boundaries are deliberate:
@@ -162,6 +165,22 @@ for these package runs. Fresh SDK homes, local-only feeds and PATH checks cover 
 Documentation logs and fixture results are retained with each verification run. To check an
 existing package README alone, use `./eng/check-docs.ps1 -Package <path-to-nupkg>`. To execute
 the examples against it, use `./eng/package-smoke.ps1 -Package <path-to-nupkg>`.
+
+## Caller-selected catalogue checks
+
+The registry tests replay independent schema, encoding, identity and budget
+fixtures through memory, seekable and non-seekable stream paths. They cover
+short reads, byte probes, ownership, cancellation and I/O ordering, plus
+compatibility with the shipped pair. The package check restores the actual
+nupkg through an exact PackageReference from an isolated local feed. Its
+consumer loads a synthetic pair from files through both overloads, checks
+literal expected hashes and entries, and compares selected and embedded
+validation results. The standalone memory and stream examples run against
+that package as well.
+
+Record the candidate package hash and the source revision with verification
+results. See [CI](ci.md) for matrix coverage. The routine pipeline uses only
+fixtures and data available in the source checkout.
 
 ## Release automation checks
 
@@ -227,20 +246,22 @@ review finding remains open. This status covers the following scope:
 | Final review: cancellation | Three deterministic traversal checks pass; removal of the in-loop token check makes all three fail in an isolated copy. |
 | Combined local verification | Full Windows pipeline passed with 194 NUnit cases in both Debug and Release, actual package consumers, examples and documentation checks. |
 
-Final merge acceptance still requires the combined Q1b/Q1c/cancellation follow-up and
-this documentation to be committed to PR #4, followed by successful Ubuntu/Windows checks
-on that candidate and final review. The observed successful PR run at e4df39e covers Q1a
-only. macOS is a main/manual job, not an additional PR requirement. Local completion does
-not establish hosted success for later changes.
+[PR #4](https://github.com/DmitryGaravsky/Spdx.Expressions/pull/4) merged as
+`2f81b48` on 2026-11-17 at 21:19:19 UTC. Its final head `2d5a1af` passed the
+[Ubuntu and Windows PR run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44178064836).
+The merge commit passed the
+[Ubuntu, Windows and macOS main run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44178578045).
+These runs establish the historical Q1 baseline. Hosted results for later changes
+belong to their own commits.
 
-Long coverage-guided fuzzing, cross-platform performance calibration and hostile-input
-tests for future catalogue-loading or reference-resolution features remain separate work.
-They are not unfinished requirements of this bounded Q1 scope. Q1 does not certify
-exhaustive conformance, security, a stable 1.0 API or a new package release.
+Q1 covered the cases above. Exhaustive conformance, security certification,
+a stable 1.0 API commitment and a package release were outside its scope.
+Long coverage-guided fuzzing and cross-platform performance calibration remain
+separate work.
 
-## Verification status
+## Historical Q1 verification
 
-As of 2026-11-17, local Windows checks with SDK 10.0.404 selected by global.json passed:
+The merged Q1 baseline was verified locally on Windows with SDK 10.0.404:
 
 | Check | Result |
 | --- | --- |
@@ -259,8 +280,6 @@ As of 2026-11-17, local Windows checks with SDK 10.0.404 selected by global.json
 | Read-only release checks against v0.1.0 | Previously passed; not rerun for conformance changes |
 | Fresh CLI homes and required SDK environment guards | Passed |
 | User/machine PATH raw registry values and kinds | Unchanged |
-| Q1a pull-request checks at e4df39e | Passed on Ubuntu and Windows, the configured PR matrix; macOS runs on main/manual dispatch |
-| Combined Q1b/Q1c/cancellation follow-up on GitHub | Pending commit/push and the resulting candidate's PR checks; local completion is recorded above |
 | Revised UI-triggered release workflow on GitHub | Not executed for this update; a separate release check, not evidence of Q1 PR acceptance |
 
 The completed pipeline used an explicit local feed for the pinned test dependencies.
@@ -268,9 +287,3 @@ The package consumer used a separate local-only feed and fresh caches. The earli
 [v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
 passed on Windows, Linux and macOS and published the package. Local success and that
 historical run do not establish hosted success for the revised UI-triggered workflow.
-The Q1a pull-request result is independently recorded in the
-[PR build run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43606334429);
-it does not cover the subsequent Q1b/Q1c/cancellation test and documentation changes.
-The read-only checks downloaded existing public artifacts and did not modify either
-service. Work reports and detailed historical analysis are not part of the published
-source tree and are not required to build, test or use the library.

@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
+using Spdx.Expressions.Internal;
 
 namespace Spdx.Expressions {
     /// <summary>The list version and exact-byte SHA-256 identities of the paired source files.</summary>
@@ -30,7 +32,7 @@ namespace Spdx.Expressions {
         }
         /// <summary>Gets the catalogue's canonical spelling.</summary>
         public string Identifier { get; }
-        /// <summary>Gets the upstream deprecation flag.</summary>
+        /// <summary>Gets the catalogue's declared deprecation flag.</summary>
         public bool IsDeprecated { get; }
     }
     /// <summary>A canonical entry in the exception namespace.</summary>
@@ -41,30 +43,87 @@ namespace Spdx.Expressions {
         }
         /// <summary>Gets the catalogue's canonical spelling.</summary>
         public string Identifier { get; }
-        /// <summary>Gets the upstream isDeprecatedLicenseId flag for this exception.</summary>
+        /// <summary>Gets the catalogue's declared deprecation flag for this exception.</summary>
         public bool IsDeprecated { get; }
     }
-    /// <summary>An immutable, offline catalogue. The MVP exposes only the pinned embedded snapshot.</summary>
+    /// <summary>An immutable, offline catalogue of license and exception identifiers.</summary>
     public sealed class SpdxLicenseRegistry {
         const string Version = "3.29.0";
         const string LicenseHash = "47d1cc681abe31166b342b6cc4aab13a6ba8ea5c48794697fe3bf8b1dbaf509a";
         const string ExceptionHash = "59ee7c150de521d635cbf9367b8cf543b8da6781ea3ac1c073d305524f84ada2";
         const string CorruptMessage = "The embedded SPDX catalogue is corrupt or inconsistent with its pinned identity.";
-        static readonly Lazy<SpdxLicenseRegistry> Snapshot = new(Load);
+        const string DistinctStreamsMessage = "The catalogue inputs must be distinct streams.";
+        const string UnreadableLicensesMessage = "The licenses stream must be readable.";
+        const string UnreadableExceptionsMessage = "The exceptions stream must be readable.";
+        static readonly Lazy<SpdxLicenseRegistry> Snapshot = new(LoadEmbedded);
         readonly FrozenDictionary<string, SpdxLicenseInfo> licenses;
         readonly FrozenDictionary<string, SpdxExceptionInfo> exceptions;
-        SpdxLicenseRegistry(List<SpdxLicenseInfo> licenseEntries, List<SpdxExceptionInfo> exceptionEntries) {
-            var orderedLicenses = licenseEntries.OrderBy(x => x.Identifier, StringComparer.Ordinal).ToArray();
-            var orderedExceptions = exceptionEntries.OrderBy(x => x.Identifier, StringComparer.Ordinal).ToArray();
-            Licenses = Array.AsReadOnly(orderedLicenses);
-            Exceptions = Array.AsReadOnly(orderedExceptions);
+        internal SpdxLicenseRegistry(SpdxRegistryIdentity identity, List<SpdxLicenseInfo> licenseEntries,
+            List<SpdxExceptionInfo> exceptionEntries, CancellationToken cancellationToken) {
+            cancellationToken.ThrowIfCancellationRequested();
+            Licenses = [.. licenseEntries.OrderBy(x => x.Identifier, StringComparer.Ordinal)];
+            cancellationToken.ThrowIfCancellationRequested();
+            Exceptions = [.. exceptionEntries.OrderBy(x => x.Identifier, StringComparer.Ordinal)];
+            cancellationToken.ThrowIfCancellationRequested();
             licenses = Licenses.ToFrozenDictionary(x => x.Identifier, StringComparer.OrdinalIgnoreCase);
+            cancellationToken.ThrowIfCancellationRequested();
             exceptions = Exceptions.ToFrozenDictionary(x => x.Identifier, StringComparer.OrdinalIgnoreCase);
-            Identity = new(Version, LicenseHash, ExceptionHash);
+            cancellationToken.ThrowIfCancellationRequested();
+            Identity = identity;
         }
         /// <summary>Gets the thread-safe embedded v3.29.0 snapshot without network access.</summary>
         /// <exception cref="InvalidOperationException">Embedded resources are corrupt (a packaging defect).</exception>
         public static SpdxLicenseRegistry Default => Snapshot.Value;
+        /// <summary>Loads a schema-checked catalogue from a complete pair of UTF-8 JSON documents.</summary>
+        /// <param name="licensesUtf8">The licenses document. Its contents must remain stable during the call.</param>
+        /// <param name="exceptionsUtf8">The exceptions document. Its contents must remain stable during the call.</param>
+        /// <param name="options">Inclusive budgets, or null to use defaults.</param>
+        /// <param name="cancellationToken">Cancellation observed during acquisition and validation.</param>
+        /// <returns>A complete registry with the declared version and hashes of the supplied bytes, or one failure diagnostic.</returns>
+        /// <remarks>
+        /// The loader checks options before cancellation and processes the licenses input first.
+        /// Inputs are copied during the call. Hashes cover the exact supplied slices, including
+        /// BOMs and whitespace. The returned registry is independent of the inputs and <see cref="Default"/>.
+        /// Success establishes structural validity of the supplied subset.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">An option is outside its documented range.</exception>
+        /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
+        public static SpdxRegistryLoadResult Load(ReadOnlyMemory<byte> licensesUtf8, ReadOnlyMemory<byte> exceptionsUtf8,
+            SpdxRegistryLoadOptions? options = null, CancellationToken cancellationToken = default) {
+            return RegistryLoader.Load(licensesUtf8, exceptionsUtf8, options, cancellationToken);
+        }
+        /// <summary>Loads a schema-checked catalogue from two readable streams containing UTF-8 JSON.</summary>
+        /// <param name="licensesUtf8">The licenses document, starting at the stream's current position.</param>
+        /// <param name="exceptionsUtf8">The exceptions document, starting at the stream's current position.</param>
+        /// <param name="options">Inclusive budgets, or null to use defaults.</param>
+        /// <param name="cancellationToken">Cancellation observed between synchronous reads and during validation.</param>
+        /// <returns>A complete registry with the declared version and hashes of the supplied bytes, or one failure diagnostic.</returns>
+        /// <remarks>
+        /// Both null checks precede the same-instance check, then <see cref="Stream.CanRead"/> is checked
+        /// in input order. Options are checked before cancellation. A read that throws propagates its
+        /// exception; a normally returning read observes cancellation before interpreting the byte count.
+        /// The streams remain open on every outcome. Each input is read through EOF or one byte past its
+        /// effective byte budget, without seeking. The licenses input is acquired and validated before
+        /// reading the exceptions input. Diagnostic offsets and hashes use the supplied suffix.
+        /// Keep ownership and contents stable during the call. The returned registry is independent of
+        /// the inputs and <see cref="Default"/>. Success establishes structural validity of the supplied subset.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Either stream is null.</exception>
+        /// <exception cref="ArgumentException">The streams are the same instance or either is unreadable.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">An option is outside its documented range.</exception>
+        /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
+        public static SpdxRegistryLoadResult Load(Stream licensesUtf8, Stream exceptionsUtf8,
+            SpdxRegistryLoadOptions? options = null, CancellationToken cancellationToken = default) {
+            ArgumentNullException.ThrowIfNull(licensesUtf8);
+            ArgumentNullException.ThrowIfNull(exceptionsUtf8);
+            if(ReferenceEquals(licensesUtf8, exceptionsUtf8))
+                throw new ArgumentException(DistinctStreamsMessage, nameof(exceptionsUtf8));
+            if(!licensesUtf8.CanRead)
+                throw new ArgumentException(UnreadableLicensesMessage, nameof(licensesUtf8));
+            if(!exceptionsUtf8.CanRead)
+                throw new ArgumentException(UnreadableExceptionsMessage, nameof(exceptionsUtf8));
+            return RegistryLoader.Load(licensesUtf8, exceptionsUtf8, options, cancellationToken);
+        }
         /// <summary>Gets the exact paired dataset identity.</summary>
         public SpdxRegistryIdentity Identity { get; }
         /// <summary>Gets all licenses in deterministic ordinal identifier order.</summary>
@@ -83,7 +142,7 @@ namespace Spdx.Expressions {
             ArgumentNullException.ThrowIfNull(identifier);
             return exceptions.TryGetValue(identifier, out exception);
         }
-        static SpdxLicenseRegistry Load() {
+        static SpdxLicenseRegistry LoadEmbedded() {
             try {
                 var licenseEntries = Read("licenses", "licenseId", LicenseHash)
                     .Select(x => new SpdxLicenseInfo(x.Id, x.Deprecated)).ToList();
@@ -92,7 +151,8 @@ namespace Spdx.Expressions {
                 if(licenseEntries.Count == 0 || exceptionEntries.Count == 0 ||
                     licenseEntries.Select(x => x.Identifier).Intersect(exceptionEntries.Select(x => x.Identifier), StringComparer.OrdinalIgnoreCase).Any())
                     throw new InvalidOperationException(CorruptMessage);
-                return new(licenseEntries, exceptionEntries);
+                var identity = new SpdxRegistryIdentity(Version, LicenseHash, ExceptionHash);
+                return new(identity, licenseEntries, exceptionEntries, CancellationToken.None);
             }
             catch(Exception error)
                 when(error is JsonException or KeyNotFoundException or FormatException or ArgumentException) {

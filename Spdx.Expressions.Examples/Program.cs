@@ -2,7 +2,7 @@ using System;
 
 namespace Spdx.Expressions.Examples {
     static class Program {
-        const string UnknownScenario = "Choose quick-start, syntax-error, unknown-id, reference, deprecated, source-spans, formatting, diagnostic-budget, exception-kind, parse-limit, or cancellation.";
+        const string UnknownScenario = "Choose quick-start, syntax-error, unknown-id, reference, deprecated, source-spans, formatting, canonical-casing, diagnostic-budget, exception-kind, parse-limit, cancellation, load-memory, load-stream, enumerate-nodes, or inspect-structure.";
         static int Main(string[] args) {
             string scenario = args.Length == 0 ? "quick-start" : args[0];
             if(args.Length > 1) {
@@ -31,6 +31,9 @@ namespace Spdx.Expressions.Examples {
                 case "formatting":
                     Formatting();
                     break;
+                case "canonical-casing":
+                    CanonicalCasing();
+                    break;
                 case "diagnostic-budget":
                     DiagnosticBudget();
                     break;
@@ -42,6 +45,18 @@ namespace Spdx.Expressions.Examples {
                     break;
                 case "cancellation":
                     Cancellation();
+                    break;
+                case "load-memory":
+                    LoadMemory();
+                    break;
+                case "load-stream":
+                    LoadStream();
+                    break;
+                case "enumerate-nodes":
+                    EnumerateNodes();
+                    break;
+                case "inspect-structure":
+                    InspectStructure();
                     break;
                 default:
                     Console.Error.WriteLine(UnknownScenario);
@@ -170,6 +185,16 @@ namespace Spdx.Expressions.Examples {
             }
             #endregion
         }
+        static void CanonicalCasing() {
+            #region canonical-casing
+            var parsed = SpdxExpressionParser.Parse(" ( mit+ WITH llvm-exception ) OR LicenseRef-MiT ");
+            if(parsed.Expression is not { } expression)
+                return;
+            var registry = SpdxLicenseRegistry.Default;
+            Console.WriteLine(SpdxExpressionFormatter.Format(expression));
+            Console.WriteLine(SpdxExpressionFormatter.FormatCanonicalCasing(expression, registry));
+            #endregion
+        }
         static void DiagnosticBudget() {
             #region diagnostic-budget
             var parsed = SpdxExpressionParser.Parse("GPL-2.0 OR GPL-2.0 OR Unknown-1.0 OR LicenseRef-X");
@@ -185,5 +210,79 @@ namespace Spdx.Expressions.Examples {
                 Console.WriteLine($"{diagnostic.Severity}: {diagnostic.Code}");
             #endregion
         }
+        static void LoadMemory() {
+            #region load-memory
+            var licenses = """{"licenseListVersion":"selected-1","licenses":[{"licenseId":"S1-Retired","isDeprecatedLicenseId":true},{"licenseId":"S1-Custom","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+            var exceptions = """{"licenseListVersion":"selected-1","exceptions":[{"licenseExceptionId":"S1-Flip","isDeprecatedLicenseId":true},{"licenseExceptionId":"S1-Exception","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+            var loaded = SpdxLicenseRegistry.Load(licenses, exceptions);
+            if(loaded.Registry is not { } registry) {
+                var diagnostic = loaded.Diagnostics[0];
+                Console.WriteLine($"{loaded.Status}: {diagnostic.Code} in {diagnostic.Input} at byte {diagnostic.ByteOffset}");
+                return;
+            }
+            var parsed = SpdxExpressionParser.Parse("s1-custom WITH S1-Exception OR Apache-2.0");
+            var expression = parsed.Expression ?? throw new InvalidOperationException("Invalid expression.");
+            var validated = SpdxExpressionValidator.Validate(expression, registry);
+            Console.WriteLine($"{validated.RegistryIdentity.LicenseListVersion} {validated.HasIdentifierErrors}");
+            foreach(var occurrence in validated.IdentifierOccurrences)
+                Console.WriteLine($"{occurrence.Role} {occurrence.Identifier} {occurrence.LookupStatus}");
+            #endregion
+        }
+        static void LoadStream() {
+            #region load-stream
+            var licenses = """{"licenseListVersion":"local","licenses":[{"licenseId":"MIT","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+            var exceptions = """{"licenseListVersion":"local","exceptions":[{"licenseExceptionId":"LLVM-exception","isDeprecatedLicenseId":false}]}"""u8.ToArray();
+            foreach(var (exceptionsBytes, options) in new (byte[], SpdxRegistryLoadOptions?)[] {
+                (exceptions, null),
+                ("{}"u8.ToArray(), null),
+                (exceptions, new() { MaxInputBytes = 8 })
+            }) {
+                using(var licenseStream = new System.IO.MemoryStream(licenses))
+                using(var exceptionStream = new System.IO.MemoryStream(exceptionsBytes)) {
+                    var loaded = SpdxLicenseRegistry.Load(licenseStream, exceptionStream, options);
+                    if(loaded.Registry is { } registry) {
+                        Console.WriteLine($"{loaded.Status}: {registry.Identity.LicenseListVersion}, {registry.Licenses.Count} license, {registry.Exceptions.Count} exception");
+                    }
+                    else {
+                        var diagnostic = loaded.Diagnostics[0];
+                        Console.WriteLine($"{loaded.Status}: {diagnostic.Code} in {diagnostic.Input} at byte {diagnostic.ByteOffset}; {diagnostic.LimitName ?? diagnostic.PropertyName}");
+                    }
+                }
+            }
+            #endregion
+        }
+        static void EnumerateNodes() {
+            #region enumerate-nodes
+            var parsed = SpdxExpressionParser.Parse(" mit+ WITH eX OR LicenseRef-X OR mit+ ");
+            if(parsed.Expression is not { } expression)
+                return;
+            foreach(var node in expression.Root.EnumerateNodes()) {
+                if(node is SpdxLicenseExpression or SpdxReferenceExpression) {
+                    var span = node.Span;
+                    string source = expression.SourceText.Substring(span.Start, span.Length);
+                    Console.WriteLine($"{node.Kind} {source} @{span.Start}");
+                }
+            }
+            #endregion
+        }
+        static void InspectStructure() {
+            #region inspect-structure
+            var parsed = SpdxExpressionParser.Parse("(MIT WITH eX) AND (LicenseRef-X OR ISC)");
+            if(parsed.Expression is not { } expression)
+                return;
+            var inspection = new StructureInspection();
+            inspection.Walk(expression.Root);
+            #endregion
+        }
+        #region helper inspect-structure
+        sealed class StructureInspection : SpdxExpressionWalker {
+            protected override void VisitGroup(SpdxGroupExpression node) {
+                Console.WriteLine($"Group {node.Span.Start}, length {node.Span.Length}");
+            }
+            protected override void VisitWith(SpdxWithExpression node) {
+                Console.WriteLine($"Exception {node.ExceptionIdentifier} @{node.ExceptionSpan.Start}");
+            }
+        }
+        #endregion
     }
 }

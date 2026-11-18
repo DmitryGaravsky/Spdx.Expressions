@@ -45,6 +45,17 @@ try {
     if ((Get-FileHash -LiteralPath $copiedPackage).Hash.ToLowerInvariant() -ne $packageHash) { throw 'Package changed while copying.' }
     Copy-Item -LiteralPath "$root/global.json" -Destination "$workspace/global.json"
     Copy-Item -LiteralPath "$PSScriptRoot/package-consumer/Program.cs" -Destination "$workspace/project/Program.cs"
+    $vectors = Get-Content -LiteralPath "$root/Spdx.Expressions.Tests/Fixtures/registry-memory.json" -Raw | ConvertFrom-Json
+    $selected = $vectors.cases | Where-Object { $_.id -ceq 'SELECTED' }
+    $licensesPath = "$workspace/project/selected-licenses.json"
+    $exceptionsPath = "$workspace/project/selected-exceptions.json"
+    [IO.File]::WriteAllText($licensesPath, $selected.Licenses.utf8)
+    [IO.File]::WriteAllText($exceptionsPath, $selected.Exceptions.utf8)
+    $canonicalPair = (Get-Content -LiteralPath "$root/Spdx.Expressions.Tests/Fixtures/canonical-catalogues.json" -Raw | ConvertFrom-Json).A
+    $canonicalLicenses = "$workspace/project/canonical-licenses.json"
+    $canonicalExceptions = "$workspace/project/canonical-exceptions.json"
+    [IO.File]::WriteAllText($canonicalLicenses, $canonicalPair.licenses)
+    [IO.File]::WriteAllText($canonicalExceptions, $canonicalPair.exceptions)
     $escapedVersion = [Security.SecurityElement]::Escape($packageVersion)
     @"
 <Project Sdk="Microsoft.NET.Sdk">
@@ -68,7 +79,7 @@ try {
     Invoke-Checked -Arguments @('msbuild', "$PSScriptRoot/SdkIsolation.proj", '-nologo') -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/sdk-environment"
     Invoke-Checked -Arguments @('restore', 'Consumer.csproj', '--configfile', "$workspace/NuGet.Config", '--no-http-cache', '-p:NuGetAudit=false') -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/restore"
     Invoke-Checked -Arguments @('build', 'Consumer.csproj', '-c', 'Release', '--no-restore', '-m:1') -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/build"
-    Invoke-Checked -Arguments @('bin/Release/net10.0/Consumer.dll', $copiedPackage) -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/run" -TimeoutSeconds 30
+    Invoke-Checked -Arguments @('bin/Release/net10.0/Consumer.dll', $copiedPackage, $licensesPath, $exceptionsPath, $canonicalLicenses, $canonicalExceptions) -WorkingDirectory "$workspace/project" -Environment $environment -LogBase "$output/run" -TimeoutSeconds 30
     Test-PackageReadme -Root $root -Package $copiedPackage
     Test-DocumentExamples -Root $root
     [IO.Directory]::CreateDirectory("$workspace/examples") | Out-Null

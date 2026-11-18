@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Spdx.Expressions;
@@ -18,16 +19,110 @@ static SpdxParsedExpression Parse(string text) {
     Check(result.Status == SpdxParseStatus.Success && result.Diagnostics.Count == 0, text);
     return result.Expression!;
 }
-static void Cancelled(Action operation) {
+static void Cancelled(Action operation, CancellationToken? token = null) {
     try {
         operation();
     }
-    catch(OperationCanceledException) {
+    catch(OperationCanceledException error) {
+        if(token is { } expected)
+            Check(error.CancellationToken == expected, "Cancellation token identity");
         return;
     }
     throw new InvalidOperationException("Cancellation did not propagate.");
 }
 
+static void CheckTraversal() {
+    var expression = Parse(" (mit+ WITH eX OR LicenseRef-X) ");
+    var root = expression.Root;
+    var visits = root.EnumerateNodes().Select(node => (node.Kind, node.Span.Start, node.Span.Length));
+    Check(visits.SequenceEqual(new[] {
+        (SpdxExpressionKind.Group, 1, 30), (SpdxExpressionKind.Or, 2, 28),
+        (SpdxExpressionKind.With, 2, 12), (SpdxExpressionKind.License, 2, 4),
+        (SpdxExpressionKind.Reference, 18, 12)
+    }), "Root-inclusive traversal, original order and spans");
+    var token = new CancellationToken(true);
+    using(var enumerator = root.EnumerateNodes(token).GetEnumerator()) {
+        Cancelled(() => {
+            enumerator.MoveNext();
+        }, token);
+    }
+    using(var cancellation = new CancellationTokenSource()) {
+        var walker = new CancellationWalker(cancellation);
+        Cancelled(() => walker.Walk(root, token), token);
+        Check(walker.Count == 0, "Pre-canceled walk has no callbacks");
+        Cancelled(() => walker.Walk(root, cancellation.Token), cancellation.Token);
+        Check(walker.Count == 4, "Walk stopped at the first license before visiting the reference");
+    }
+}
+
+static SpdxLicenseRegistry CheckSelectedLoad(SpdxRegistryLoadResult loaded) {
+    Check(loaded.Status == SpdxRegistryLoadStatus.Success && loaded.Diagnostics.Count == 0, "Selected pair loads");
+    var selected = loaded.Registry ?? throw new InvalidOperationException("Selected registry missing.");
+    Check(selected.Identity.LicenseListVersion == "selected-1", "Selected list version");
+    Check(selected.Identity.LicensesSha256 == "97ea673646c087bcedc6e308700d14607c4c3a6380bb639692b67f62773dd3f1", "Selected licenses hash");
+    Check(selected.Identity.ExceptionsSha256 == "f3b52b394fae004d7c54802827d68f7735c4600977c273c4e3325509b24768d9", "Selected exceptions hash");
+    Check(selected.Licenses.Select(entry => (entry.Identifier, entry.IsDeprecated)).SequenceEqual(new[] {
+        ("S1-Custom", false), ("S1-Retired", true)
+    }), "Selected license entries");
+    Check(selected.Exceptions.Select(entry => (entry.Identifier, entry.IsDeprecated)).SequenceEqual(new[] {
+        ("S1-Exception", false), ("S1-Flip", true)
+    }), "Selected exception entries");
+    return selected;
+}
+static void CheckSelectedValidation(SpdxValidationResult validation, SpdxRegistryIdentity identity, bool isSelected) {
+    Check(ReferenceEquals(validation.RegistryIdentity, identity), "Identity of the supplied catalogue");
+    Check(validation.HasIdentifierErrors && !validation.HasUnresolvedReferences && !validation.DiagnosticsTruncated, "Selected expression flags");
+    Check(validation.References.Count == 0, "Selected expression has no references");
+    var occurrences = validation.IdentifierOccurrences;
+    Check(occurrences.Count == 3, "Selected expression occurrence count");
+    var license = SpdxIdentifierRole.License;
+    var exception = SpdxIdentifierRole.Exception;
+    var known = SpdxIdentifierLookupStatus.Known;
+    var unknown = SpdxIdentifierLookupStatus.Unknown;
+    var expected = isSelected
+        ? new (string, int, int, SpdxIdentifierRole, SpdxIdentifierLookupStatus, string?, bool?)[] {
+            ("s1-custom", 0, 9, license, known, "S1-Custom", false),
+            ("S1-Exception", 15, 12, exception, known, "S1-Exception", false),
+            ("Apache-2.0", 31, 10, license, unknown, null, null)
+        }
+        : new (string, int, int, SpdxIdentifierRole, SpdxIdentifierLookupStatus, string?, bool?)[] {
+            ("s1-custom", 0, 9, license, unknown, null, null),
+            ("S1-Exception", 15, 12, exception, unknown, null, null),
+            ("Apache-2.0", 31, 10, license, known, "Apache-2.0", false)
+        };
+    Check(occurrences.Select(item => (item.Identifier, item.Span.Start, item.Span.Length, item.Role,
+        item.LookupStatus, item.CanonicalIdentifier, item.IsDeprecated)).SequenceEqual(expected), "Selected expression occurrences");
+    var diagnostics = isSelected
+        ? new[] { ("SPDX_ID_UNKNOWN_LICENSE", 31, 10) }
+        : new[] { ("SPDX_ID_UNKNOWN_LICENSE", 0, 9), ("SPDX_ID_UNKNOWN_EXCEPTION", 15, 12) };
+    Check(validation.Diagnostics.All(item => item.Severity == SpdxDiagnosticSeverity.Error) &&
+        validation.Diagnostics.Select(item => (item.Code, item.Span.Start, item.Span.Length)).SequenceEqual(diagnostics),
+        "Selected expression diagnostics");
+}
+
+static void CheckExternalCanonicalCasing(string licensesPath, string exceptionsPath) {
+    var expression = Parse(" mit+ WITH llvm-exception OR apache-2.0 OR LicenseRef-miT ");
+    var memory = SpdxLicenseRegistry.Load(File.ReadAllBytes(licensesPath), File.ReadAllBytes(exceptionsPath));
+    using(var licenses = File.OpenRead(licensesPath))
+    using(var exceptions = File.OpenRead(exceptionsPath)) {
+        var streams = SpdxLicenseRegistry.Load(licenses, exceptions);
+        foreach(var loaded in new[] { memory, streams }) {
+            Check(loaded.Status == SpdxRegistryLoadStatus.Success && loaded.Diagnostics.Count == 0, "Canonical fixture loads");
+            var selected = loaded.Registry ?? throw new InvalidOperationException("Canonical fixture registry missing.");
+            Check(selected.Identity.LicenseListVersion == "case-fixture" &&
+                selected.Identity.LicensesSha256 == "c297ffb202abc89f304c437e827f02ecf18ef1a0578fe8ae2dc7f322367fa2c2" &&
+                selected.Identity.ExceptionsSha256 == "ea53d83abd1a45bded9e8171c76e8f839602b1f2caf719b780938a54df8f7543",
+                "Exact canonical fixture identity");
+            Check(SpdxExpressionFormatter.FormatCanonicalCasing(expression, selected) ==
+                "mIt+ WITH lLvM-Exception OR apache-2.0 OR LicenseRef-miT", "External canonical casing with no embedded fallback");
+        }
+    }
+    Check(SpdxExpressionFormatter.Format(expression, default) ==
+        "mit+ WITH llvm-exception OR apache-2.0 OR LicenseRef-miT", "Existing default literal binding");
+}
+
+CheckTraversal();
+CheckExternalCanonicalCasing(args[3], args[4]);
 var registry = SpdxLicenseRegistry.Default;
 Parallel.For(0, 32, _ => Check(ReferenceEquals(registry, SpdxLicenseRegistry.Default), "Shared snapshot"));
 Check(registry.Licenses.Count == 740 && registry.Exceptions.Count == 86, "Entry counts");
@@ -35,6 +130,24 @@ Check(registry.Identity.LicenseListVersion == "3.29.0", "List version");
 Check(registry.TryGetLicense("mit", out var mit) && mit.Identifier == "MIT", "Case-insensitive license lookup");
 Check(registry.TryGetException("llvm-exception", out var llvm) && llvm.Identifier == "LLVM-exception", "Exception namespace");
 Check(registry.TryGetLicense("GPL-2.0+", out var plus) && plus.IsDeprecated, "Literal deprecated catalogue ID");
+
+SpdxRegistryLoadResult streamLoad;
+using(var licensesFile = File.OpenRead(args[1]))
+using(var exceptionsFile = File.OpenRead(args[2])) {
+    streamLoad = SpdxLicenseRegistry.Load(licensesFile, exceptionsFile);
+    Check(licensesFile.Position == licensesFile.Length && exceptionsFile.Position == exceptionsFile.Length, "Selected files remain open at EOF");
+}
+var streamRegistry = CheckSelectedLoad(streamLoad);
+var memoryRegistry = CheckSelectedLoad(SpdxLicenseRegistry.Load(File.ReadAllBytes(args[1]), File.ReadAllBytes(args[2])));
+Check(!ReferenceEquals(streamRegistry, memoryRegistry) && !ReferenceEquals(streamRegistry, registry) && !ReferenceEquals(memoryRegistry, registry),
+    "Independent selected registries");
+const string selectedSource = "s1-custom WITH S1-Exception OR Apache-2.0";
+var selectedExpression = Parse(selectedSource);
+Check(SpdxExpressionFormatter.Format(selectedExpression) == selectedSource, "Selected expression formatting");
+CheckSelectedValidation(SpdxExpressionValidator.Validate(selectedExpression, streamRegistry), streamRegistry.Identity, isSelected: true);
+CheckSelectedValidation(SpdxExpressionValidator.Validate(selectedExpression, memoryRegistry), memoryRegistry.Identity, isSelected: true);
+CheckSelectedValidation(SpdxExpressionValidator.Validate(selectedExpression, registry), registry.Identity, isSelected: false);
+Check(ReferenceEquals(registry, SpdxLicenseRegistry.Default), "Default survives selected loads");
 
 var expression = Parse(" \t(MIT OR mit) AND GPL-2.0+ WITH LLVM-exception ");
 var root = (SpdxAndExpression)expression.Root;
@@ -44,6 +157,8 @@ var with = (SpdxWithExpression)root.Operands[1];
 Check(with.ExceptionSpan.Start == 33 && with.ExceptionSpan.Length == 14, "Exception source span");
 Check(((SpdxLicenseExpression)with.Operand).OrLater, "Plus retained");
 Check(SpdxExpressionFormatter.Format(expression) == "(MIT OR mit) AND GPL-2.0+ WITH LLVM-exception", "Formatting");
+Check(SpdxExpressionFormatter.FormatCanonicalCasing(expression, registry) == "(MIT OR MIT) AND GPL-2.0+ WITH LLVM-exception",
+    "Explicit embedded canonical casing");
 
 var all = SpdxExpressionValidator.Validate(Parse("GPL-2.0 OR GPL-2.0 OR Unknown-1.0 OR DocumentRef-D:LicenseRef-X OR LicenseRef-X"), registry,
     new() { MaxDiagnostics = 1 });
@@ -87,6 +202,8 @@ Check(limit.Status == SpdxParseStatus.LimitExceeded && limit.Expression is null,
 Cancelled(() => SpdxExpressionParser.Parse("MIT", cancellationToken: new(true)));
 Cancelled(() => SpdxExpressionValidator.Validate(expression, registry, cancellationToken: new(true)));
 Cancelled(() => SpdxExpressionFormatter.Format(expression, new(true)));
+var canonicalCancellation = new CancellationToken(true);
+Cancelled(() => SpdxExpressionFormatter.FormatCanonicalCasing(expression, registry, canonicalCancellation), canonicalCancellation);
 
 var assembly = typeof(SpdxLicenseRegistry).Assembly;
 Check(assembly.GetName().Name == "Spdx.Expressions", "Assembly identity");
@@ -136,7 +253,23 @@ Console.WriteLine(JsonSerializer.Serialize(new {
     os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
     runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
     packageSha256 = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(args[0]))),
+    loadedDllSha256 = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assembly.Location))),
+    traversal = "passed",
+    selected = memoryRegistry.Identity,
     listVersion = registry.Identity.LicenseListVersion,
     licensesSha256 = registry.Identity.LicensesSha256,
     exceptionsSha256 = registry.Identity.ExceptionsSha256
 }));
+
+sealed class CancellationWalker : SpdxExpressionWalker {
+    readonly CancellationTokenSource cancellation;
+    internal CancellationWalker(CancellationTokenSource cancellation) {
+        this.cancellation = cancellation;
+    }
+    internal int Count { get; private set; }
+    protected override void VisitNode(SpdxExpressionNode node) {
+        Count++;
+        if(node is SpdxLicenseExpression)
+            cancellation.Cancel();
+    }
+}
