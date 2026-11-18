@@ -7,6 +7,11 @@ with the assembly for IDE completion. Parse, ordinary Format and AST traversal w
 without a registry. Validation and canonical casing each take an explicit registry.
 These operations accept optional cancellation tokens.
 
+This guide describes the 1.0.0 API baseline under the [1.x compatibility policy](compatibility.md).
+Parse, Validate, ordinary Format and the embedded registry were available in 0.1.0.
+The Load overloads, EnumerateNodes, SpdxExpressionWalker and FormatCanonicalCasing
+are available starting with 1.0.0.
+
 ## Operations
 
 | Entry point | Input | Result |
@@ -181,7 +186,7 @@ identify the catalogue used for an output. Use validation separately for identif
 diagnostics and unresolved references. Null arguments are checked in expression,
 registry order before cancellation. Cancellation throws `OperationCanceledException`
 without a partial string. See the [canonical casing example](usage.md#apply-the-selected-catalogues-casing).
-The new API is available from this source checkout and local packages until released.
+This method is part of the 1.0.0 baseline; it is not available in 0.1.0.
 
 Both formatters are deterministic and idempotent with the same inputs and, where
 applicable, the same catalogue. Reparse with sufficient limits to preserve structure

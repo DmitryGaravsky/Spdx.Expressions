@@ -1,8 +1,8 @@
 # Architecture
 
 Spdx.Expressions is an independent net10.0 library with no runtime NuGet dependencies.
-Its grammar, catalogue and package identities are separate. Font.Metadata is not a
-dependency, and its testing/release process does not gate this project's development.
+Its grammar, catalogue and package identities are separate. Applications and adapters
+consume the library through its public API; their models and release processes are independent.
 
 ```text
 Source string ──→ Parse ──→ immutable AST + source/spans

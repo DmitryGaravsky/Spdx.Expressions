@@ -21,9 +21,10 @@ dotnet run
 
 For an existing application, run the package installation command from its project directory.
 Package restore requires access to NuGet.org. Library execution is offline.
-The quick start works with the published 0.1.0 package. The catalogue loading, traversal
-and canonical casing examples require this checkout or a verified
-[local package](#use-a-local-package) until a release includes these APIs.
+The quick start also works with 0.1.0. The catalogue loading, traversal and canonical
+casing examples require version 1.0.0 or later. To test a source checkout, use a
+verified [local package](#use-a-local-package).
+See the [compatibility policy](compatibility.md) for the 1.x guarantees.
 
 ## Run the examples
 
@@ -239,8 +240,8 @@ Formatted: '(mit OR Apache-2.0) AND MIT'
 ## Apply the selected catalogue's casing
 
 Scenario `canonical-casing` uses the same AST for spelling-preserving formatting
-and catalogue-specific casing. This API is available from the current source or a
-local package until it ships in a release. Pass the registry you want to use.
+and catalogue-specific casing. This API is part of the 1.0.0 baseline and is absent
+from 0.1.0. Pass the registry you want to use.
 
 <!-- example: canonical-casing -->
 ```csharp

@@ -186,7 +186,7 @@ fixtures and data available in the source checkout.
 
 ```powershell
 ./eng/test-release.ps1
-./eng/prepare-release.ps1 -Tag v0.1.0-preview.1
+./eng/prepare-release.ps1 -Tag v1.0.0
 ```
 
 The standalone script tests stable/prerelease tags, malformed versions, package
@@ -231,59 +231,27 @@ repository or available public resources.
 Generated output paths in these instructions describe files created by a local run;
 they are not links to files shipped in the repository.
 
-## Q1 readiness
+## Release verification
 
-As of 2026-11-17, the bounded Q1 implementation and local verification are complete.
-The final review's confirmed cancellation coverage gap is resolved; no confirmed local
-review finding remains open. This status covers the following scope:
-
-| Area | Delivered and verified |
-| --- | --- |
-| Q1a: specification conformance | Annex D coverage map, explicit profile decisions and independent fixtures; 58 conformance cases including the Q1b additions. |
-| Q1b: differential pilot | 68 inputs against pinned JavaScript and .NET parsers; every observed difference classified and six boundary fixtures retained. |
-| Q1c: bounded robustness | Generated, mutation, UTF-16 and large-input campaigns completed; six additional robustness cases included in the normal suite. |
-| Q1c: performance baseline | Same-build timing/allocation and first-use observations recorded with their noise limits; no performance threshold or SLA asserted. |
-| Final review: cancellation | Three deterministic traversal checks pass; removal of the in-loop token check makes all three fail in an isolated copy. |
-| Combined local verification | Full Windows pipeline passed with 194 NUnit cases in both Debug and Release, actual package consumers, examples and documentation checks. |
-
-[PR #4](https://github.com/DmitryGaravsky/Spdx.Expressions/pull/4) merged as
-`2f81b48` on 2026-11-17 at 21:19:19 UTC. Its final head `2d5a1af` passed the
-[Ubuntu and Windows PR run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44178064836).
-The merge commit passed the
-[Ubuntu, Windows and macOS main run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44178578045).
-These runs establish the historical Q1 baseline. Hosted results for later changes
-belong to their own commits.
-
-Q1 covered the cases above. Exhaustive conformance, security certification,
-a stable 1.0 API commitment and a package release were outside its scope.
-Long coverage-guided fuzzing and cross-platform performance calibration remain
-separate work.
-
-## Historical Q1 verification
-
-The merged Q1 baseline was verified locally on Windows with SDK 10.0.404:
+The 1.0.0 API and package have passed the complete local verification pipeline
+on Windows with .NET SDK 10.0.404 and runtime 10.0.15:
 
 | Check | Result |
 | --- | --- |
-| Debug and Release compilation | Passed; zero warnings and errors |
-| Debug NUnit | 194 passed, 0 failed, 0 skipped; includes 58 conformance, 6 additional robustness and 3 deterministic cancellation cases |
-| Release NUnit | 194 passed, 0 failed, 0 skipped; includes 58 conformance, 6 additional robustness and 3 deterministic cancellation cases |
-| Solution and consumer formatting | Passed |
-| Documentation links and source blocks | 73 relative links and 11 example programs passed |
-| Documentation checker fixtures | 21 scenarios passed |
-| Documented example output against the development nupkg | 11 scenarios and 11 standalone programs passed |
-| Local package setup commands and standalone quick-start program | Previously passed with a fresh application and package cache; manual setup not rerun for conformance changes |
-| Development package with external PackageReference consumers | Passed (0.1.0-dev) |
-| Offline release scripts | 46 scenarios passed; substituted GitHub/HTTP commands, no publication |
-| Tag-version release preparation | Not rerun for this update |
-| Build/release workflow actionlint validation | Previously passed with actionlint 1.7.12; not rerun for conformance changes |
-| Read-only release checks against v0.1.0 | Previously passed; not rerun for conformance changes |
-| Fresh CLI homes and required SDK environment guards | Passed |
-| User/machine PATH raw registry values and kinds | Unchanged |
-| Revised UI-triggered release workflow on GitHub | Not executed for this update; a separate release check, not evidence of Q1 PR acceptance |
+| Debug and Release NUnit suites | 815 passed in each configuration; zero failures or skips |
+| Builds and formatting | Passed; zero build warnings or errors |
+| Actual-package examples | 16 scenarios and 16 independently compiled programs passed |
+| Documentation fixtures | 24 cases passed; links and source blocks verified |
+| Offline release-script checks | 46 cases passed without publication credentials |
+| Package identity and contents | Version, XML docs, README, notices and embedded data verified |
+| SDK isolation | Required guards applied; persistent PATH unchanged |
 
-The completed pipeline used an explicit local feed for the pinned test dependencies.
-The package consumer used a separate local-only feed and fresh caches. The earlier
-[v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
-passed on Windows, Linux and macOS and published the package. Local success and that
-historical run do not establish hosted success for the revised UI-triggered workflow.
+The merged implementation passed the
+[Ubuntu, Windows and macOS main CI run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44354643541).
+Each tagged release independently runs the complete three-platform verification
+before publishing its retained artifact. Use that release's workflow result and
+checksums to identify the distributed package.
+
+These checks support the [1.x compatibility contract](compatibility.md). Bounded
+robustness and differential checks do not constitute exhaustive conformance,
+security certification or a performance SLA.

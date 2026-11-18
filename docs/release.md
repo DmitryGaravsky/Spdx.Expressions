@@ -10,7 +10,7 @@ distributing the package. The real package check verifies the generated README c
 The package does not contain the repository guides or runnable example sources.
 The implementation's MIT declaration does not replace the dataset's attribution.
 
-Only the library is packable. Ordinary builds use 0.1.0-dev. The SDK version and
+Only the library is packable. The source version is 1.0.0. The SDK version and
 roll-forward policy are declared in global.json; changing either requires renewed
 verification. CI installs the declared SDK.
 
@@ -19,8 +19,8 @@ verification. CI installs the declared SDK.
 ```powershell
 ./eng/verify.ps1
 ./eng/test-release.ps1
-./eng/prepare-release.ps1 -Tag v0.1.0-preview.1
-./eng/verify-release-assets.ps1 -Version 0.1.0-preview.1 -Directory ./artifacts/release/0.1.0-preview.1
+./eng/prepare-release.ps1 -Tag v1.0.0
+./eng/verify-release-assets.ps1 -Version 1.0.0 -Directory ./artifacts/release/1.0.0
 ```
 
 Verification includes offline release-script tests with synthetic packages and substituted
@@ -50,6 +50,12 @@ OutputDirectory arguments follow the caller's PowerShell location.
 
 ## Version policy
 
+The [1.x compatibility policy](compatibility.md) defines stable API contracts,
+additive changes, diagnostic/enum evolution and embedded catalogue updates.
+The 1.0.0 baseline includes the catalogue loader, traversal and canonical-casing APIs.
+The release tag supplies the final version to all verification and packaging steps,
+overriding the source version in Directory.Build.props. Local preparation never publishes.
+
 Tags are v followed by three canonical numeric components, optionally a lowercase
 SemVer prerelease suffix: v1.2.3 or v1.2.3-preview.1. Leading zeroes in numeric components
 or numeric prerelease identifiers, uppercase suffixes and build metadata are rejected.
@@ -62,7 +68,7 @@ unchecked for a stable version. Classification mismatches stop publication.
 1. Commit and push the reviewed changes to main and check the build CI results. The
    selected commit must contain this release workflow; existing old tags retain their
    old workflow. Do not move or reuse a published version tag.
-2. Open **Releases → Draft a new release**. Create a new tag such as v0.1.1 targeting
+2. Open **Releases → Draft a new release**. Create a new tag such as v1.0.0 targeting
    main, or select an existing version tag whose commit belongs to main.
 3. Enter the release title and description. Select **This is a pre-release** only for
    a prerelease version. Leave the asset list empty; the workflow supplies both files.
@@ -168,7 +174,5 @@ never edited by the workflow; release creation and deletion are not automated.
 NuGet publication is not rolled back by a later GitHub failure. A complete matching
 immutable release permits a read-only retry, but missing files cannot be added to it.
 
-The earlier tag-driven [v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
-passed on all three platforms and published the first package. That historical success
-does not validate this revised UI-triggered workflow. See [Testing](testing.md#historical-q1-verification)
-for local verification and the remaining hosted check.
+See [release verification](testing.md#release-verification) for the accepted checks.
+Publication uses the results and retained artifacts of the exact tagged release.

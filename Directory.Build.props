@@ -6,7 +6,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <IsPackable>false</IsPackable>
-    <Version>0.1.0-dev</Version>
+    <Version>1.0.0</Version>
     <Authors>Dmitry Garavsky</Authors>
     <Copyright>Copyright (c) 2026 Dmitry Garavsky</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
