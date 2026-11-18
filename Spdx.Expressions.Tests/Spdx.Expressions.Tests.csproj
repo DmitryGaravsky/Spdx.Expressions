@@ -3,5 +3,6 @@
   <ItemGroup>
     <ProjectReference Include="../Spdx.Expressions/Spdx.Expressions.csproj" />
     <None Include="../Spdx.Expressions/Data/*" Link="Data/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/registry-memory.json;Fixtures/canonical-catalogues.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

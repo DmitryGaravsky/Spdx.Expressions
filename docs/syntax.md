@@ -87,6 +87,77 @@ These budgets are engineering controls, not process isolation, a wall-clock guar
 or a completed security audit. Host-level resource controls remain the caller's concern.
 
 Pass `SpdxParseOptions` to Parse and `SpdxValidationOptions` to Validate. Invalid option
-values throw argument exceptions; exceeding a valid parser budget returns `LimitExceeded`.
+values throw argument exceptions; exceeding a valid parser budget returns `LimitExceeded`. Both formatters can add spaces
+and require a larger input-length budget on reparse. Applying catalogue casing leaves the
+length of each identifier unchanged.
 A requested cancellation throws `OperationCanceledException` without a partial result in
-all three operations. It is distinct from invalid input and budget exhaustion.
+Parse, Validate, Format and FormatCanonicalCasing. It is distinct from invalid input and budget exhaustion.
+
+## Catalogue load diagnostics
+
+Catalogue loading uses `SpdxRegistryDiagnostic`. Use `Code` for decisions and
+`Message` for display. `Input` identifies Licenses or Exceptions. `ByteOffset`
+is a zero-based point in the supplied memory slice or stream suffix, counting
+any BOM and allowing EOF. Expression diagnostics instead use UTF-16 spans in
+the expression string.
+
+`EntryIndex` is the zero-based source index in the root collection, when
+applicable. `PropertyName` can identify a decoded name, a required name, or the
+property providing the value context, including through nested arrays. It can
+be null when a name is unavailable or does not apply. UTF-8 and JSON lexical
+errors, root type and trailing data errors, and acquisition byte limits have
+neither entry nor property context. `LimitName` is set only for a limit failure
+and gives the exact option property name.
+
+| Code | Location and meaning |
+| --- | --- |
+| `SPDX_REGISTRY_INVALID_UTF8` | Start of the first malformed or truncated UTF-8 sequence |
+| `SPDX_REGISTRY_INVALID_UNICODE` | Backslash starting an unpaired surrogate escape |
+| `SPDX_REGISTRY_INVALID_JSON` | Offending byte or EOF in malformed JSON |
+| `SPDX_REGISTRY_TRAILING_DATA` | First non-whitespace byte after the root object |
+| `SPDX_REGISTRY_ROOT_TYPE` | Start of a root token other than an object |
+| `SPDX_REGISTRY_MISSING_PROPERTY` | Closing brace of an object with a missing required property |
+| `SPDX_REGISTRY_PROPERTY_TYPE` | Start of a required property's wrong-type value |
+| `SPDX_REGISTRY_DUPLICATE_PROPERTY` | Opening quote of the repeated decoded property name |
+| `SPDX_REGISTRY_UNEXPECTED_PROPERTY` | Opening quote of an opposite collection or ID property |
+| `SPDX_REGISTRY_INVALID_VERSION` | Opening quote of an invalid version label |
+| `SPDX_REGISTRY_VERSION_MISMATCH` | Opening quote of the exception input's differing version value |
+| `SPDX_REGISTRY_ENTRY_TYPE` | Start of a non-object element of the required array |
+| `SPDX_REGISTRY_EMPTY_COLLECTION` | Closing bracket of the required empty array |
+| `SPDX_REGISTRY_INVALID_IDENTIFIER` | Opening quote of an invalid ID, including a plus ID without deprecation |
+| `SPDX_REGISTRY_DUPLICATE_IDENTIFIER` | Opening quote of the repeated ID in the same namespace |
+| `SPDX_REGISTRY_NAMESPACE_COLLISION` | Opening quote of the first colliding ID in exception source order |
+| `SPDX_REGISTRY_LIMIT_EXCEEDED` | First byte outside the accepted byte budget or start of the token that exceeds a JSON or schema budget |
+
+The first 16 codes return `InvalidData`. The last returns `LimitExceeded`.
+Each failure reports one primary diagnostic according to the
+[load order](api.md#load-results-and-call-order).
+
+## Catalogue load limits
+
+All `SpdxRegistryLoadOptions` limits are inclusive. Null options use these defaults.
+Limits are independent, and each must be a positive integer. `MaxJsonDepth`
+also has an upper bound of 64. The table gives the order used to validate options.
+
+| Option | Default | Unit and scope |
+| --- | ---: | --- |
+| `MaxInputBytes` | 16,777,216 | Raw bytes per document, including BOM and whitespace |
+| `MaxTotalInputBytes` | 33,554,432 | Accepted raw bytes across both documents, including BOMs and whitespace |
+| `MaxJsonDepth` | 16 | Simultaneously open containers, with the root at depth 1 |
+| `MaxLicenses` | 10,000 | Direct elements of the root licenses array |
+| `MaxExceptions` | 2,000 | Direct elements of the root exceptions array |
+| `MaxIdentifierLength` | 256 | Decoded UTF-16 units per ID, including a legacy plus |
+| `MaxStringLength` | 16,384 | Decoded UTF-16 units per property name or string value |
+| `MaxTotalStringLength` | 8,388,608 | Decoded UTF-16 units of all property names and string values across both documents, counting each occurrence |
+| `MaxObjectProperties` | 64 | Property occurrences per object |
+| `MaxArrayLength` | 10,000 | Direct elements per array, including both catalogue arrays |
+| `MaxTokens` | 250,000 | Combined JSON tokens across both documents, counting names, values and opening/closing delimiters |
+| `MaxTokenBytes` | 131,072 | Raw bytes per recognized token, including quotes and escapes, excluding separators and intervening whitespace |
+
+The effective byte allowance for each input is the smaller of its per-input limit
+and the remaining pair allowance. Equal byte-limit failures report `MaxInputBytes`.
+JSON and string budgets apply to ignored metadata and count prospective elements
+and properties. A supplementary Unicode character counts as two decoded UTF-16
+units. Acquisition budgets bound scans of incomplete tokens; `MaxTokenBytes`
+applies once a token is recognized. These options limit input and work without
+defining an exact heap or elapsed-time bound.

@@ -126,6 +126,13 @@ namespace Spdx.Expressions.Tests {
             AssertCancellation(token => format ? SpdxExpressionFormatter.Format(expression, token) :
                 (object)SpdxExpressionValidator.Validate(expression, registry, new() { MaxDiagnostics = 1 }, token));
         }
+        [Test]
+        public void CancellationDuringCanonicalFormatting() {
+            string input = string.Join(" OR ", Enumerable.Repeat("mit WITH llvm-exception", 200_000));
+            var expression = GrammarTests.Parse(input, new() { MaxInputLength = input.Length, MaxNodes = 400_001, MaxTokens = 800_000 });
+            var registry = SpdxLicenseRegistry.Default;
+            AssertCancellation(token => SpdxExpressionFormatter.FormatCanonicalCasing(expression, registry, token));
+        }
         [TestCase(1)]
         [TestCase(9)]
         [TestCase(12)]

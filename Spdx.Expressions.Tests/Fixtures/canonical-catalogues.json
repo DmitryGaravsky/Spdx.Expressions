@@ -1,0 +1,14 @@
+{
+  "A": {
+    "licenses": "{\"licenseListVersion\":\"case-fixture\",\"licenses\":[{\"licenseId\":\"mIt\",\"isDeprecatedLicenseId\":false},{\"licenseId\":\"AcMe.1\",\"isDeprecatedLicenseId\":false},{\"licenseId\":\"oLd\",\"isDeprecatedLicenseId\":true},{\"licenseId\":\"OlD+\",\"isDeprecatedLicenseId\":true},{\"licenseId\":\"pLuSoNlY+\",\"isDeprecatedLicenseId\":true}]}",
+    "exceptions": "{\"licenseListVersion\":\"case-fixture\",\"exceptions\":[{\"licenseExceptionId\":\"lLvM-Exception\",\"isDeprecatedLicenseId\":false},{\"licenseExceptionId\":\"oLd-Exc\",\"isDeprecatedLicenseId\":true}]}",
+    "licensesHash": "c297ffb202abc89f304c437e827f02ecf18ef1a0578fe8ae2dc7f322367fa2c2",
+    "exceptionsHash": "ea53d83abd1a45bded9e8171c76e8f839602b1f2caf719b780938a54df8f7543"
+  },
+  "B": {
+    "licenses": "{\"licenseListVersion\":\"case-fixture\",\"licenses\":[{\"licenseId\":\"MiT\",\"isDeprecatedLicenseId\":false},{\"licenseId\":\"AcMe.1\",\"isDeprecatedLicenseId\":false},{\"licenseId\":\"oLd\",\"isDeprecatedLicenseId\":true},{\"licenseId\":\"OlD+\",\"isDeprecatedLicenseId\":true},{\"licenseId\":\"pLuSoNlY+\",\"isDeprecatedLicenseId\":true}]}",
+    "exceptions": "{\"licenseListVersion\":\"case-fixture\",\"exceptions\":[{\"licenseExceptionId\":\"LLvm-exCEPTION\",\"isDeprecatedLicenseId\":false},{\"licenseExceptionId\":\"oLd-Exc\",\"isDeprecatedLicenseId\":true}]}",
+    "licensesHash": "a6270dff5be06f2defb5cad9e7c4a98e893f40a3c6645f644dd1c3007b7a02a1",
+    "exceptionsHash": "bef33cb03127a796732d27d600b221d600d11c5a5f514bdf5f9c1adf214b11e8"
+  }
+}

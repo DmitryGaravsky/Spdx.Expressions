@@ -30,7 +30,9 @@ prepare-release.ps1 accept an optional RestoreSource for a local feed.
 Preparation validates the tag, runs the complete pipeline with that version, then copies
 the exact tested nupkg into a new release directory. Version is applied to restore,
 Debug/Release builds and packing; the isolated consumer checks the loaded assembly's
-informational version against the nuspec. Directory.Build.props is not rewritten.
+informational version against the nuspec. Its catalogue checks cover both loader
+overloads and compare validation with caller-selected and embedded data. The package
+ships the pinned embedded pair. Loader inputs for other snapshots are supplied by callers.
 Preparation needs no Git tag, remote, credentials or network when a complete local feed
 is supplied. It does not change Git state or publish.
 
@@ -168,5 +170,5 @@ immutable release permits a read-only retry, but missing files cannot be added t
 
 The earlier tag-driven [v0.1.0 release run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/43598068968)
 passed on all three platforms and published the first package. That historical success
-does not validate this revised UI-triggered workflow. See [Testing](testing.md#verification-status)
+does not validate this revised UI-triggered workflow. See [Testing](testing.md#historical-q1-verification)
 for local verification and the remaining hosted check.

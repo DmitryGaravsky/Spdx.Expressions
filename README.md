@@ -6,31 +6,46 @@
 [![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](Spdx.Expressions/Spdx.Expressions.csproj)
 [![SPDX License List 3.29.0](https://img.shields.io/badge/SPDX%20License%20List-3.29.0-blue)](docs/catalogue.md)
 
-A standalone .NET 10 library for applications that read, check or display SPDX license
-expressions. It preserves original text and source spans, checks identifiers against a
-pinned offline SPDX License List, and formats spacing while retaining spelling, grouping
-and operand order. There are no runtime NuGet dependencies or runtime network requests.
+A standalone .NET 10 library for parsing, inspecting, validating and formatting SPDX license
+expressions while preserving source evidence. It retains original text alongside an
+immutable AST with exact spelling, explicit groups and source spans for diagnostics
+and application-specific analysis. It checks identifiers against a
+pinned offline SPDX License List or a caller-selected UTF-8 catalogue pair, and formats
+spacing while retaining grouping and operand order. Callers can also opt in to the supplied
+catalogue's casing for known identifiers. The library has no runtime NuGet dependencies
+or runtime network requests.
 
-**Status:** published on [NuGet.org](https://www.nuget.org/packages/Spdx.Expressions/);
-targets **net10.0 only**. The syntax profile is SPDX-2.3.1;
-the embedded catalogue is v3.29.0. These versions are independent of the package version.
+The library targets **net10.0 only**. The syntax profile is SPDX-2.3.1 and the
+embedded catalogue is v3.29.0. These versions are independent of the package version.
 Source: [DmitryGaravsky/Spdx.Expressions](https://github.com/DmitryGaravsky/Spdx.Expressions).
 
 ## When to use it
 
 - Check expression fields in package metadata or application forms.
-- Report syntax and identifier diagnostics at positions in the original input.
-- Collect identifiers and custom references, including repeated occurrences.
-- Display consistent spacing without rewriting the expression's structure or spelling.
+- Report diagnostics at positions in the original input while keeping the source
+  available alongside formatted output.
+- Collect identifiers and custom references, including repeated occurrences; diagnostic
+  storage limits preserve all occurrences and outcome flags.
+- Inspect groups and operators with lazy AST enumeration or typed walker callbacks
+  to build application-specific checks.
+- Pin a catalogue independently of the parser, validate the same AST against different
+  datasets, and record exact-byte catalogue hashes with results.
+- Process supplied expressions and catalogue JSON with configurable resource limits,
+  stable diagnostic codes and cooperative cancellation.
+- Display consistent spacing and optionally apply catalogue spelling while preserving expression structure.
 
 | Operation | What it establishes |
 | --- | --- |
 | Parse | The entire input follows the fixed syntax profile and configured limits |
-| Validate | Which identifiers exist in the pinned catalogue, plus all unresolved references |
-| Format | Consistent spacing; no catalogue lookup or expression simplification |
+| Validate | Which identifiers exist in the supplied catalogue, plus all unresolved references |
+| Load | Whether a caller-selected licenses and exceptions pair meets the supported JSON schema and resource limits |
+| EnumerateNodes / Walk | Original syntax nodes in root-inclusive source order, without catalogue lookup |
+| Format | Consistent spacing and exact original identifier spelling |
+| FormatCanonicalCasing | Consistent spacing and the supplied catalogue's casing for known identifiers in their namespace |
 
-Parse and Format do not initialize the catalogue. Successful parsing does not establish
-that identifiers are known. Validation does not resolve references, check license/exception
+Parse, AST traversal and ordinary Format work without a catalogue. Validation and canonical
+casing use a registry you supply. Successful parsing does not establish that identifiers are
+known. Validation does not resolve references, check license/exception
 combinations, or establish legal permission or compatibility. This library consumes
 expression strings; it does not extract them from prose or read complete SBOM documents.
 
@@ -85,6 +100,12 @@ Unresolved references: False
 Diagnostics truncated: False
 ```
 
+The quick start works with the published 0.1.0 package. Run the
+[catalogue loader](docs/usage.md#load-a-selected-catalogue-from-memory),
+[AST traversal](docs/usage.md#collect-license-and-reference-occurrences) and
+[canonical casing](docs/usage.md#apply-the-selected-catalogues-casing) examples from
+this checkout or a verified local package until a release includes these APIs.
+
 ## Documentation
 
 | Guide | Contents |
@@ -92,7 +113,7 @@ Diagnostics truncated: False
 | [Usage and examples](docs/usage.md) | NuGet and local setup, runnable scenarios and expected output |
 | [API guide](docs/api.md) | Operations, result flags, AST and source evidence |
 | [Syntax reference](docs/syntax.md) | Grammar policies, diagnostic codes, limits and cancellation |
-| [Embedded catalogue](docs/catalogue.md) | Lookup behavior, dataset identity and updates |
+| [Catalogues](docs/catalogue.md) | Embedded snapshot, caller-selected schema, lookup and dataset identity |
 
 For development, see [Contributing](CONTRIBUTING.md), [Architecture](docs/architecture.md),
 [Testing](docs/testing.md), [CI](docs/ci.md) and [Release](docs/release.md).
@@ -103,5 +124,6 @@ actual package. Local checks do not establish GitHub-hosted or cross-platform su
 
 The implementation is [MIT licensed](LICENSE), copyright (c) 2026 Dmitry Garavsky.
 The embedded catalogue retains its separate [upstream attribution](THIRD-PARTY-NOTICES.md).
-There is no CLI product, reference resolver, AST serialization, canonical-casing mode,
-external catalogue loader, automatic catalogue update or legal-policy engine.
+The library covers expression operations and catalogue selection. Reference resolution,
+AST serialization, automatic catalogue updates and legal-policy decisions are outside
+its scope.

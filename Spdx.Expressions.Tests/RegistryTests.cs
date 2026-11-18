@@ -62,22 +62,28 @@ namespace Spdx.Expressions.Tests {
         }
         [Test]
         public void NoMutablePublicGraphOrCollections() {
-            var parse = SpdxExpressionParser.Parse("(MIT OR MIT) AND LicenseRef-X");
+            var parse = SpdxExpressionParser.Parse("(MIT OR Unknown-License) AND LicenseRef-X");
+            var invalid = SpdxExpressionParser.Parse("MIT AND");
             var root = (SpdxAndExpression)parse.Expression!.Root;
             var validation = SpdxExpressionValidator.Validate(parse.Expression, SpdxLicenseRegistry.Default);
             foreach(var list in new object[] { root.Operands, ((SpdxOrExpression)((SpdxGroupExpression)root.Operands[0]).Inner).Operands,
-            parse.Diagnostics, validation.Diagnostics, validation.IdentifierOccurrences, validation.References,
-            SpdxLicenseRegistry.Default.Licenses, SpdxLicenseRegistry.Default.Exceptions }) {
-                Assert.That(list, Is.Not.InstanceOf<Array>());
-                Assert.That(((IList)list).IsReadOnly, Is.True);
-                Assert.Throws<NotSupportedException>(() => ((IList)list).Clear());
-            }
+            parse.Diagnostics, invalid.Diagnostics, validation.Diagnostics, validation.IdentifierOccurrences, validation.References,
+            SpdxLicenseRegistry.Default.Licenses, SpdxLicenseRegistry.Default.Exceptions })
+                AssertReadOnly((IList)list);
             var assembly = typeof(SpdxParsedExpression).Assembly;
             foreach(var type in assembly.GetExportedTypes().Where(x => x.IsClass && !x.IsAbstract && !x.Name.EndsWith("Options", StringComparison.Ordinal)))
                 Assert.That(type.GetConstructors(), Is.Empty, type.FullName);
             Assert.That(typeof(SpdxExpressionNode).GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance).All(x => x.IsFamilyAndAssembly), Is.True);
             foreach(var type in assembly.GetExportedTypes().Where(x => !x.Name.EndsWith("Options", StringComparison.Ordinal)))
                 Assert.That(type.GetProperties().Where(x => x.SetMethod?.IsPublic == true), Is.Empty, type.FullName);
+        }
+        internal static void AssertReadOnly(IList list) {
+            Assert.That(list, Is.Not.InstanceOf<Array>());
+            Assert.That(list.IsReadOnly, Is.True);
+            Assert.Throws<NotSupportedException>(() => list.Clear());
+            // An array-backed read-only wrapper can expose its writable storage through ICollection.
+            if(list.Count > 0 && list.SyncRoot is IList storage)
+                Assert.That(storage.IsReadOnly, Is.True, list.GetType().FullName);
         }
         [TestCase("")]
         [TestCase("tr-TR")]

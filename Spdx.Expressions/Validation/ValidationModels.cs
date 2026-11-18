@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -48,9 +47,14 @@ namespace Spdx.Expressions {
             RegistryIdentity = identity;
             HasIdentifierErrors = errors;
             DiagnosticsTruncated = truncated;
-            IdentifierOccurrences = identifiers.Count == 0 ? ReadOnlyCollection<SpdxIdentifierOccurrence>.Empty : Array.AsReadOnly(identifiers.ToArray());
-            References = references.Count == 0 ? ReadOnlyCollection<SpdxReferenceOccurrence>.Empty : Array.AsReadOnly(references.ToArray());
-            Diagnostics = diagnostics.Count == 0 ? ReadOnlyCollection<SpdxDiagnostic>.Empty : Array.AsReadOnly(diagnostics.ToArray());
+            IdentifierOccurrences = Snapshot(identifiers);
+            References = Snapshot(references);
+            Diagnostics = Snapshot(diagnostics);
+        }
+        static IReadOnlyList<T> Snapshot<T>(List<T> items) {
+            if(items.Count == 0)
+                return ReadOnlyCollection<T>.Empty;
+            return [.. items];
         }
         /// <summary>Gets the exact catalogue used for validation.</summary>
         public SpdxRegistryIdentity RegistryIdentity { get; }

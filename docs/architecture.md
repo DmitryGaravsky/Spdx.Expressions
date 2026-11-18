@@ -7,7 +7,10 @@ dependency, and its testing/release process does not gate this project's develop
 ```text
 Source string ──→ Parse ──→ immutable AST + source/spans
                       │              │
+                      │              ├──→ EnumerateNodes / Walk ──→ original nodes
+                      │              │
                       │              ├──→ Format ──→ deterministic spacing
+                      │              ├──→ FormatCanonicalCasing ←── explicit immutable registry
                       │              │
                       │              └──→ Validate ←── explicit immutable registry
                       │                         │
@@ -17,10 +20,11 @@ Source string ──→ Parse ──→ immutable AST + source/spans
 
 | Location | Responsibility |
 | --- | --- |
-| Spdx.Expressions/Parsing | Parser, options, diagnostics, AST and parse results |
-| Spdx.Expressions/Registry | Fixed embedded catalogue, minimal entries and identity |
+| Spdx.Expressions/Parsing | Parser, options, diagnostics, AST, parse results and walker |
+| Spdx.Expressions/Registry | Immutable catalogue model, load contracts and lazy embedded snapshot |
+| Spdx.Expressions/Registry/Internal | Bounded acquisition, JSON/schema validation and exact-byte identity for caller-selected pairs |
 | Spdx.Expressions/Validation | Complete occurrence collection and bounded diagnostics |
-| Spdx.Expressions/Formatting | Spacing-only output |
+| Spdx.Expressions/Formatting | Shared renderer for spacing and opt-in catalogue casing |
 | Spdx.Expressions/Internal | Explicit-stack syntax traversal shared by operations |
 | Spdx.Expressions/Data | Exact upstream source bytes, provenance and notices |
 | Spdx.Expressions.Tests | Independent NUnit fixtures |
@@ -30,11 +34,18 @@ Source string ──→ Parse ──→ immutable AST + source/spans
 Public types always use Spdx.Expressions; folder names do not change the API namespace.
 Internal shared helpers use Spdx.Expressions.Internal. AST constructors are non-public.
 Collections do not expose mutable storage. Options are immutable and operations have
-no shared mutable request state. The registry is a lazy, thread-safe immutable snapshot.
+no shared mutable request state. The embedded registry is a lazy, thread-safe immutable
+snapshot. External memory and stream paths share document parsing and pair checks.
+Each load owns its byte snapshots and budgets, then constructs an independent immutable
+registry. Parse, ordinary Format and AST traversal work independently of the catalogue.
+Validation and opt-in canonical casing each use their explicitly supplied registry.
 
 Parser recursion is bounded by explicit group depth; operator chains are flat lists.
-Validator/formatter traverse with an explicit stack. Diagnostic storage never limits
-occurrence collection or changes error/reference flags. Format does no catalogue lookup.
+Enumeration projects entry frames from the explicit stack shared with validation and
+formatting. The walker dispatches the same nodes to typed callbacks. Diagnostic storage
+never limits occurrence collection or changes error/reference flags. The shared renderer
+copies source slices for ordinary Format and looks up the expected namespace for
+eligible IDs in FormatCanonicalCasing. Both paths preserve the original AST.
 
 The [API guide](api.md), [syntax reference](syntax.md) and [catalogue guide](catalogue.md)
 specify spans, results, lexical policies, limits and dataset identity. Keep those contracts
@@ -44,6 +55,8 @@ Documentation examples are source regions in the examples project. Repository ch
 them with the complete programs in README/Usage; package smoke checks build the same source
 through PackageReference and compare each scenario with the documented expected output.
 Each documented program is also compiled and executed independently of the example runner.
+The package consumer checks both catalogue input forms and validates the same expression
+with the selected and embedded registries.
 The library does not depend on the examples or documentation tooling.
 
 Packaging generates README from the authored root file through eng/PackageReadme.targets,

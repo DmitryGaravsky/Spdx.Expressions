@@ -82,6 +82,20 @@ try {
     [IO.File]::WriteAllText("$suite/Spdx.Expressions.Examples/Program.cs", "            #region hello`n            $code`n            #endregion`n")
     Test-DocumentExamples $suite
     $cases.Add('Matching runnable example')
+    $sourcePath = "$suite/Spdx.Expressions.Examples/Program.cs"
+    $originalSource = [IO.File]::ReadAllText($sourcePath)
+    $helper = 'sealed class Helper { }'
+    $helperRegion = "        #region helper hello`n        $helper`n        #endregion`n"
+    [IO.File]::WriteAllText($sourcePath, $originalSource + $helperRegion)
+    Reject 'Helper code absent from documented example' { Test-DocumentExamples $suite } '*code differs*'
+    [IO.File]::WriteAllText("$suite/README.md", $sample.Replace("$code`n", "$code`n`n$helper`n"))
+    Test-DocumentExamples $suite
+    $cases.Add('Matching runnable example with helper')
+    [IO.File]::WriteAllText($sourcePath, $originalSource + $helperRegion)
+    [IO.File]::WriteAllText("$suite/README.md", $sample)
+    [IO.File]::WriteAllText($sourcePath, $originalSource + $helperRegion.Replace('helper hello', 'helper unknown'))
+    Reject 'Orphaned helper region' { Test-DocumentExamples $suite } '*no documented example*'
+    [IO.File]::WriteAllText($sourcePath, $originalSource)
     [IO.File]::WriteAllText("$suite/README.md", $sample.Replace('WriteLine', 'Write'))
     Reject 'Changed documented code' { Test-DocumentExamples $suite } '*code differs*'
     [IO.File]::WriteAllText("$suite/README.md", $sample.Replace('Expected output:', 'Output omitted:'))

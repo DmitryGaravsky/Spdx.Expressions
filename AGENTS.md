@@ -8,11 +8,12 @@ must reference this file rather than duplicate it. Preserve unrelated concurrent
 
 Spdx.Expressions is a standalone net10.0 library implementing Parse, Validate and Format
 for the fixed SPDX-2.3.1 expression profile. It preserves immutable source evidence and
-uses a pinned, offline SPDX v3.29.0 licence/exception catalogue. It has no runtime NuGet
-dependencies and no dependency on Font.Metadata, CLI, font or SBOM models.
+supports the pinned offline SPDX v3.29.0 catalogue and caller-selected UTF-8 catalogue
+pairs loaded from memory or streams. It has no runtime NuGet dependencies and no
+dependency on Font.Metadata, CLI, font or SBOM models.
 
 Work directly in this repository for authorized tasks. Integration, external consumers,
-reference resolution, external catalogue loading, serialization, automatic updates and
+reference resolution, serialization, automatic updates and
 publication require their own tasks. Font.Metadata testing is independent of this project.
 
 ## Git ownership
@@ -40,7 +41,7 @@ verification outputs remain ignored; preserve historical evidence.
 | Runnable examples and local package setup | [Usage](docs/usage.md) |
 | Operations, models and result contracts | [API](docs/api.md) |
 | Syntax, diagnostics and limits | [Syntax](docs/syntax.md) |
-| Embedded data and identity | [Catalogue](docs/catalogue.md) |
+| Catalogue loading, embedded data and identity | [Catalogue](docs/catalogue.md) |
 | Source organization and invariants | [Architecture](docs/architecture.md) |
 | Contribution workflow | [Contributing](CONTRIBUTING.md) |
 | Verification and package checks | [Testing](docs/testing.md) |
@@ -57,11 +58,12 @@ configured workflows do not prove that features work or hosted checks have passe
   Shared test settings belong in eng/Tests.props; package versions in Directory.Packages.props.
 - Target net10.0 only. Keep stable SDK selection explicit in global.json; version and roll-forward policy changes require renewed verification.
 - Group sources by responsibility: Parsing (parser/options/AST/results), Registry (embedded
-  catalogue/identity/entries), Validation (validation/results), Formatting, and Internal.
+  catalogue/loading/identity/entries), Validation (validation/results), Formatting, and Internal.
   Public namespaces remain Spdx.Expressions regardless of folders. Internal shared helpers
   use Spdx.Expressions.Internal. Working package and assembly names are Spdx.Expressions.
-- Keep Parse, Validate and Format independently usable. Validate takes an explicit registry;
-  Parse and Format must not initialize it. Do not introduce convenience facades without need.
+- Keep Parse, ordinary Format and AST traversal usable without initializing a registry.
+  Validate and FormatCanonicalCasing each take an explicit registry. Do not introduce
+  convenience facades without need.
 - Preserve immutable results, source order, explicit groups, exact spelling and UTF-16 spans.
   Do not expose mutable backing storage, public AST builders or caller-constructed graphs.
 - Public members must serve independent consumers. Do not widen visibility for tests or add
@@ -76,7 +78,9 @@ configured workflows do not prove that features work or hosted checks have passe
   must not stop traversal, remove evidence or hide late errors/references from outcome flags.
 - Keep identifier errors, unresolved references and diagnostic truncation independent. Do not
   infer usage permission, compatibility or resolved references from a successful operation.
-- Keep formatting limited to spacing: preserve casing, suffixes, grouping and operand order.
+- Keep ordinary Format limited to spacing. FormatCanonicalCasing uses the supplied registry
+  to change only known identifier spelling in its own namespace. Both preserve source
+  evidence, suffixes, grouping and operand order.
 - Check budgets and arithmetic before growth. Keep traversal safe for long chains and bounded
   nesting. Observe cancellation during whitespace/candidate scanning and traversal.
 - Catch expected input failures at deliberate boundaries. Never disguise cancellation,
@@ -85,6 +89,9 @@ configured workflows do not prove that features work or hosted checks have passe
 - Keep catalogue bytes, hashes, commit provenance and notices together. Update paired files
   manually from one reviewed upstream commit and verify every imported entry. Respect binary
   attributes for exact source bytes; do not format or reserialize upstream data/notices.
+- Load external pairs atomically with bounded acquisition, JSON and schema validation.
+  Preserve exact-byte identities and caller ownership. External loads are independent
+  of the embedded snapshot; schema validity alone does not establish provenance.
 - Corrupt embedded resources are packaging defects. Do not return an empty successful registry.
   Runtime and builds never download catalogue updates. No shared mutable request state or caches
   keyed by untrusted expression text are allowed.
