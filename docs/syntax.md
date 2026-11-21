@@ -23,7 +23,8 @@ Policies are fixed, with no permissive mode:
   whitespace on both sides and attaches only to a license or reference, never a group.
 - One adjacent plus is allowed on a license candidate, never a reference or exception.
 - Uppercase AND, OR, WITH, NONE and NOASSERTION are reserved whole tokens in ID positions.
-  NONE/NOASSERTION are field values outside this API. Lowercase forms are ordinary candidates.
+  The [license field reader](api.md#license-field-values) recognizes NONE/NOASSERTION as complete field values.
+  The expression parser rejects them as operands. Lowercase forms are ordinary candidates.
   Reference components such as `LicenseRef-NONE` are allowed.
 - Full input consumption is required. Comments, declaration prefixes, quotes, underscores,
   NUL, Unicode lookalikes, repeated WITH and trailing prose are rejected.

@@ -2,7 +2,7 @@ using System;
 
 namespace Spdx.Expressions.Examples {
     static class Program {
-        const string UnknownScenario = "Choose quick-start, syntax-error, unknown-id, reference, deprecated, source-spans, formatting, canonical-casing, diagnostic-budget, exception-kind, parse-limit, cancellation, load-memory, load-stream, enumerate-nodes, or inspect-structure.";
+        const string UnknownScenario = "Choose quick-start, license-field, inspect-license-field, syntax-error, unknown-id, reference, resolve-references, deprecated, source-spans, formatting, canonical-casing, diagnostic-budget, diagnostic-report, exception-kind, parse-limit, cancellation, load-memory, load-stream, enumerate-nodes, or inspect-structure.";
         static int Main(string[] args) {
             string scenario = args.Length == 0 ? "quick-start" : args[0];
             if(args.Length > 1) {
@@ -16,11 +16,20 @@ namespace Spdx.Expressions.Examples {
                 case "syntax-error":
                     SyntaxError();
                     break;
+                case "inspect-license-field":
+                    InspectLicenseField();
+                    break;
+                case "license-field":
+                    LicenseField();
+                    break;
                 case "unknown-id":
                     UnknownIdentifier();
                     break;
                 case "reference":
                     Reference();
+                    break;
+                case "resolve-references":
+                    ResolveReferences();
                     break;
                 case "deprecated":
                     Deprecated();
@@ -36,6 +45,9 @@ namespace Spdx.Expressions.Examples {
                     break;
                 case "diagnostic-budget":
                     DiagnosticBudget();
+                    break;
+                case "diagnostic-report":
+                    DiagnosticReport();
                     break;
                 case "exception-kind":
                     ExceptionKind();
@@ -90,6 +102,39 @@ namespace Spdx.Expressions.Examples {
                 Console.WriteLine($"{diagnostic.Code}: start={diagnostic.Span.Start}, length={diagnostic.Span.Length}");
             #endregion
         }
+        static void InspectLicenseField() {
+            #region inspect-license-field
+            var field = SpdxLicenseFieldReader.Read(" mit OR DocumentRef-V:LicenseRef-X ");
+            if(field.Expression is not { } expression)
+                return;
+            var registry = SpdxLicenseRegistry.Default;
+            foreach(var node in expression.Root.EnumerateNodes()) {
+                if(node is SpdxLicenseExpression id && registry.TryGetLicense(id.Identifier, out var license))
+                    Console.WriteLine($"{id.Identifier} = {license.Name}");
+            }
+            var context = SpdxReferenceContext.Create(
+                availableDocuments: ["app", "vendor"],
+                definitions: [new("vendor", "X", "Vendor terms.")],
+                bindings: [new("app", "V", "vendor")]);
+            foreach(var result in context.Resolve(expression, "app")) {
+                var span = result.Occurrence.Span;
+                string spelling = expression.SourceText.Substring(span.Start, span.Length);
+                Console.WriteLine($"{spelling} @{span.Start} -> {result.TargetDocumentIdentity} ({result.Status})");
+                if(result.Definition is { } definition)
+                    Console.WriteLine(definition.ExtractedText);
+            }
+            #endregion
+        }
+        static void LicenseField() {
+            #region license-field
+            string?[] fields = [null, "", " ", "NONE", " NOASSERTION ", " MIT OR Apache-2.0 "];
+            foreach(string? text in fields) {
+                var field = SpdxLicenseFieldReader.Read(text);
+                string source = field.SourceText is null ? "<absent>" : $"'{field.SourceText}'";
+                Console.WriteLine($"{source} -> {field.Kind}");
+            }
+            #endregion
+        }
         static void UnknownIdentifier() {
             #region unknown-id
             var parsed = SpdxExpressionParser.Parse("Unknown-1.0");
@@ -112,6 +157,24 @@ namespace Spdx.Expressions.Examples {
             Console.WriteLine($"Unresolved references: {validation.HasUnresolvedReferences}");
             foreach(var reference in validation.References)
                 Console.WriteLine($"License component: {reference.LicenseId}");
+            #endregion
+        }
+        static void ResolveReferences() {
+            #region resolve-references
+            var parsed = SpdxExpressionParser.Parse(" LicenseRef-X OR DocumentRef-D:LicenseRef-X OR DocumentRef-E:LicenseRef-X");
+            if(parsed.Expression is not { } expression)
+                return;
+            var context = SpdxReferenceContext.Create(
+                availableDocuments: ["app", "vendor"],
+                definitions: [new("app", "X", "Application terms."), new("vendor", "X", "Vendor terms.")],
+                bindings: [new("app", "D", "vendor"), new("app", "E", "archive")]);
+            foreach(var result in context.Resolve(expression, "app")) {
+                var span = result.Occurrence.Span;
+                string spelling = expression.SourceText.Substring(span.Start, span.Length);
+                Console.WriteLine($"{spelling} @{span.Start} {result.SourceDocumentIdentity} -> {result.TargetDocumentIdentity} {result.Status}");
+                if(result.Definition is { } definition)
+                    Console.WriteLine(definition.ExtractedText);
+            }
             #endregion
         }
         static void Deprecated() {
@@ -208,6 +271,40 @@ namespace Spdx.Expressions.Examples {
             Console.WriteLine($"Identifiers: {validation.IdentifierOccurrences.Count}; references: {validation.References.Count}");
             foreach(var diagnostic in validation.Diagnostics)
                 Console.WriteLine($"{diagnostic.Severity}: {diagnostic.Code}");
+            #endregion
+        }
+        static void DiagnosticReport() {
+            #region diagnostic-report
+            foreach(string source in new[] { "MIT OR", "GPL-2.0 OR LicenseRef-X OR Unknown-1.0 OR LicenseRef-X" }) {
+                var parsed = SpdxExpressionParser.Parse(source);
+                Console.WriteLine($"Source: {source}");
+                Console.WriteLine($"Parse: {parsed.Status}, AST: {parsed.Expression?.Root.Kind.ToString() ?? "absent"}");
+                foreach(var diagnostic in parsed.Diagnostics)
+                    WriteDiagnostic(diagnostic);
+                if(parsed.Expression is not { } expression)
+                    continue;
+                foreach(int budget in new[] { 2, 1 }) {
+                    var options = new SpdxValidationOptions { MaxDiagnostics = budget };
+                    var validation = SpdxExpressionValidator.Validate(expression, SpdxLicenseRegistry.Default, options);
+                    Console.WriteLine($"MaxDiagnostics={budget}, DiagnosticsTruncated={validation.DiagnosticsTruncated}");
+                    foreach(var diagnostic in validation.Diagnostics)
+                        WriteDiagnostic(diagnostic);
+                    Console.WriteLine($"HasIdentifierErrors={validation.HasIdentifierErrors}, HasUnresolvedReferences={validation.HasUnresolvedReferences}");
+                    foreach(var id in validation.IdentifierOccurrences)
+                        Console.WriteLine($"  {id.LookupStatus} ID {id.Identifier} {Range(id.Span)}");
+                    foreach(var reference in validation.References) {
+                        var span = reference.Span;
+                        string spelling = source.Substring(span.Start, span.Length);
+                        Console.WriteLine($"  Reference {spelling} {Range(span)} (resolution not attempted)");
+                    }
+                }
+            }
+            static void WriteDiagnostic(SpdxDiagnostic diagnostic) {
+                Console.WriteLine($"  {diagnostic.Severity} {diagnostic.Code} {Range(diagnostic.Span)}");
+            }
+            static string Range(SpdxSourceSpan span) {
+                return $"[{span.Start}..{span.Start + span.Length})";
+            }
             #endregion
         }
         static void LoadMemory() {

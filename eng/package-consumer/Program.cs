@@ -67,6 +67,8 @@ static SpdxLicenseRegistry CheckSelectedLoad(SpdxRegistryLoadResult loaded) {
     Check(selected.Exceptions.Select(entry => (entry.Identifier, entry.IsDeprecated)).SequenceEqual(new[] {
         ("S1-Exception", false), ("S1-Flip", true)
     }), "Selected exception entries");
+    Check(selected.Licenses.All(x => x.Name is null && x.Reference is null && x.SeeAlso.Count == 0) &&
+        selected.Exceptions.All(x => x.Name is null && x.Reference is null && x.SeeAlso.Count == 0), "Minimal external entry metadata");
     return selected;
 }
 static void CheckSelectedValidation(SpdxValidationResult validation, SpdxRegistryIdentity identity, bool isSelected) {
@@ -122,6 +124,24 @@ static void CheckExternalCanonicalCasing(string licensesPath, string exceptionsP
 }
 
 CheckTraversal();
+var extracted = new SpdxLicenseDefinition("vendor", "X", " first\r\nsecond ", "Vendor terms", "urn:terms");
+var referenceContext = SpdxReferenceContext.Create(["app", "vendor"], [extracted], [new("app", "ext", "vendor")]);
+var resolved = referenceContext.Resolve(Parse(" DocumentRef-ext:LicenseRef-X OR LicenseRef-X"), "app");
+Check(resolved.Count == 2 && resolved[0].Status == SpdxReferenceResolutionStatus.Resolved &&
+    ReferenceEquals(resolved[0].Definition, extracted) && resolved[0].Occurrence.Span.Start == 1 &&
+    resolved[0].TargetDocumentIdentity == "vendor" && resolved[1].Status == SpdxReferenceResolutionStatus.DefinitionMissing,
+    "Document-scoped reference lookup from the installed package");
+var fieldExpression = SpdxLicenseFieldReader.Read("  (mit OR ISC) ");
+Check(fieldExpression.Kind == SpdxLicenseFieldKind.Expression && fieldExpression.SourceText == "  (mit OR ISC) " &&
+    fieldExpression.Expression?.Root is SpdxGroupExpression { Span.Start: 2, Span.Length: 12 }, "License field source and tree");
+var fieldLimit = SpdxLicenseFieldReader.Read(" NONE ", new() { MaxInputLength = 5 });
+Check(fieldLimit.Kind == SpdxLicenseFieldKind.LimitExceeded && fieldLimit.Expression is null &&
+    fieldLimit.Diagnostics.Single().Code == "SPDX_PARSE_LIMIT_EXCEEDED", "Padded field input limit");
+var compoundField = SpdxLicenseFieldReader.Read("MIT OR NONE");
+Check(compoundField.Kind == SpdxLicenseFieldKind.InvalidSyntax && compoundField.Diagnostics.Single().Span.Start == 7,
+    "Sentinel cannot be an operand");
+Check(SpdxExpressionParser.Parse("NONE").Diagnostics.Single().Code == "SPDX_PARSE_FIELD_SENTINEL" &&
+    SpdxExpressionParser.Parse("").Diagnostics.Single().Code == "SPDX_PARSE_EMPTY_INPUT", "Strict expression parser contract");
 CheckExternalCanonicalCasing(args[3], args[4]);
 var registry = SpdxLicenseRegistry.Default;
 Parallel.For(0, 32, _ => Check(ReferenceEquals(registry, SpdxLicenseRegistry.Default), "Shared snapshot"));
@@ -129,6 +149,17 @@ Check(registry.Licenses.Count == 740 && registry.Exceptions.Count == 86, "Entry 
 Check(registry.Identity.LicenseListVersion == "3.29.0", "List version");
 Check(registry.TryGetLicense("mit", out var mit) && mit.Identifier == "MIT", "Case-insensitive license lookup");
 Check(registry.TryGetException("llvm-exception", out var llvm) && llvm.Identifier == "LLVM-exception", "Exception namespace");
+Check(mit!.Name == "MIT License" && mit.Reference == "https://spdx.org/licenses/MIT.html" &&
+    mit.SeeAlso.First() == "https://opensource.org/license/MIT", "License display metadata");
+Check(llvm!.Name == "LLVM Exception" && llvm.Reference == "https://spdx.org/licenses/LLVM-exception.html" &&
+    llvm.SeeAlso.First() == "http://llvm.org/foundation/relicensing/LICENSE.txt", "Exception display metadata");
+var displayRegistry = SpdxLicenseRegistry.Load(
+    """{"licenseListVersion":"local","licenses":[{"licenseId":"MIT","isDeprecatedLicenseId":false,"name":"Local title","reference":"my-record","seeAlso":["b","a"]}]}"""u8.ToArray(),
+    """{"licenseListVersion":"local","exceptions":[{"licenseExceptionId":"LLVM-exception","isDeprecatedLicenseId":false,"name":null,"seeAlso":["x",false]}]}"""u8.ToArray()).Registry!;
+Check(displayRegistry.TryGetLicense("MIT", out var localLicense) && localLicense.Name == "Local title" &&
+    localLicense.Reference == "my-record" && localLicense.SeeAlso.SequenceEqual(new[] { "b", "a" }), "External display metadata");
+Check(displayRegistry.TryGetException("LLVM-exception", out var localException) && localException.Name is null &&
+    localException.Reference is null && localException.SeeAlso.Count == 0, "Ill-typed external metadata stays unavailable");
 Check(registry.TryGetLicense("GPL-2.0+", out var plus) && plus.IsDeprecated, "Literal deprecated catalogue ID");
 
 SpdxRegistryLoadResult streamLoad;
@@ -255,6 +286,7 @@ Console.WriteLine(JsonSerializer.Serialize(new {
     packageSha256 = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(args[0]))),
     loadedDllSha256 = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(assembly.Location))),
     traversal = "passed",
+    referenceResolution = "passed",
     selected = memoryRegistry.Identity,
     listVersion = registry.Identity.LicenseListVersion,
     licensesSha256 = registry.Identity.LicensesSha256,

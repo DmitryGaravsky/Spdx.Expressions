@@ -34,12 +34,14 @@ namespace Spdx.Expressions.Tests {
                             Assert.That(registry.TryGetLicense(spelling, out var entry), Is.True, spelling);
                             Assert.That(entry!.Identifier, Is.EqualTo(id));
                             Assert.That(entry.IsDeprecated, Is.EqualTo(deprecated));
+                            CheckDisplayFields(row, entry.Name, entry.Reference, entry.SeeAlso);
                             Assert.That(registry.TryGetException(spelling, out _), Is.False);
                         }
                         else {
                             Assert.That(registry.TryGetException(spelling, out var entry), Is.True, spelling);
                             Assert.That(entry!.Identifier, Is.EqualTo(id));
                             Assert.That(entry.IsDeprecated, Is.EqualTo(deprecated));
+                            CheckDisplayFields(row, entry.Name, entry.Reference, entry.SeeAlso);
                             Assert.That(registry.TryGetLicense(spelling, out _), Is.False);
                         }
                     }
@@ -60,6 +62,11 @@ namespace Spdx.Expressions.Tests {
                 }
             }
         }
+        static void CheckDisplayFields(JsonElement row, string? name, string? reference, IReadOnlyList<string> seeAlso) {
+            Assert.That(name, Is.EqualTo(row.GetProperty("name").GetString()));
+            Assert.That(reference, Is.EqualTo(row.GetProperty("reference").GetString()));
+            Assert.That(seeAlso, Is.EqualTo(row.GetProperty("seeAlso").EnumerateArray().Select(item => item.GetString())));
+        }
         [Test]
         public void NoMutablePublicGraphOrCollections() {
             var parse = SpdxExpressionParser.Parse("(MIT OR Unknown-License) AND LicenseRef-X");
@@ -71,7 +78,9 @@ namespace Spdx.Expressions.Tests {
             SpdxLicenseRegistry.Default.Licenses, SpdxLicenseRegistry.Default.Exceptions })
                 AssertReadOnly((IList)list);
             var assembly = typeof(SpdxParsedExpression).Assembly;
-            foreach(var type in assembly.GetExportedTypes().Where(x => x.IsClass && !x.IsAbstract && !x.Name.EndsWith("Options", StringComparison.Ordinal)))
+            // Applications construct these two immutable inputs. The library constructs its output graphs.
+            Type[] contextInputs = [typeof(SpdxLicenseDefinition), typeof(SpdxDocumentBinding)];
+            foreach(var type in assembly.GetExportedTypes().Except(contextInputs).Where(x => x.IsClass && !x.IsAbstract && !x.Name.EndsWith("Options", StringComparison.Ordinal)))
                 Assert.That(type.GetConstructors(), Is.Empty, type.FullName);
             Assert.That(typeof(SpdxExpressionNode).GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance).All(x => x.IsFamilyAndAssembly), Is.True);
             foreach(var type in assembly.GetExportedTypes().Where(x => !x.Name.EndsWith("Options", StringComparison.Ordinal)))

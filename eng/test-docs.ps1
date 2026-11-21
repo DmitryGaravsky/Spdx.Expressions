@@ -32,7 +32,7 @@ try {
         [IO.File]::WriteAllText("$suite/$file", "# Fixture`n")
     }
     [IO.File]::WriteAllText("$suite/docs/guide.md", "# Guide`n`n## A heading`n")
-    $valid = "# Fixture`n`n[Guide](docs/guide.md#a-heading)`n"
+    $valid = "# Fixture`n`n[![Guide](https://example.invalid/guide.svg)](docs/guide.md#a-heading)`n"
     [IO.File]::WriteAllText("$suite/README.md", $valid)
     Test-DocumentLinks $suite
     $cases.Add('Valid file and heading')
@@ -63,7 +63,7 @@ try {
     Test-PackageReadme -Root $suite -Package $package
     $cases.Add('Portable package README')
     Write-FixturePackage $valid
-    Reject 'Relative package link' { Test-PackageReadme -Root $suite -Package $package } '*non-portable link*'
+    Reject 'Relative package badge destination' { Test-PackageReadme -Root $suite -Package $package } '*non-portable link*'
     Write-FixturePackage ($valid.Replace('(docs/', '(https://github.com/DmitryGaravsky/Spdx.Expressions/blob/main/docs/').Replace('# Fixture', '# Changed'))
     Reject 'Changed package prose' { Test-PackageReadme -Root $suite -Package $package } '*changed content*'
     $commit = '0123456789abcdef0123456789abcdef01234567'

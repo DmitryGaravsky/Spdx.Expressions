@@ -5,6 +5,9 @@ Its grammar, catalogue and package identities are separate. Applications and ada
 consume the library through its public API; their models and release processes are independent.
 
 ```text
+Nullable field ──→ Read ──→ Missing / Empty / None / NoAssertion
+                      └──→ original string passed to Parse for expression or failure
+
 Source string ──→ Parse ──→ immutable AST + source/spans
                       │              │
                       │              ├──→ EnumerateNodes / Walk ──→ original nodes
@@ -12,18 +15,26 @@ Source string ──→ Parse ──→ immutable AST + source/spans
                       │              ├──→ Format ──→ deterministic spacing
                       │              ├──→ FormatCanonicalCasing ←── explicit immutable registry
                       │              │
+                      │              ├──→ Resolve ←── source document + indexed reference context
+                      │              │          └──→ definition or lookup status per reference occurrence
+                      │              │
                       │              └──→ Validate ←── explicit immutable registry
                       │                         │
                       │                         └──→ all occurrences + independent flags
                       └──→ syntax/limit diagnostic, no partial AST
+
+Embedded JSON streams ─┐
+                       ├──→ bounded pair loader ──→ registry entries with names and links
+Selected bytes/streams ┘                              and exact-byte catalogue identity
 ```
 
 | Location | Responsibility |
 | --- | --- |
 | Spdx.Expressions/Parsing | Parser, options, diagnostics, AST, parse results and walker |
 | Spdx.Expressions/Registry | Immutable catalogue model, load contracts and lazy embedded snapshot |
-| Spdx.Expressions/Registry/Internal | Bounded acquisition, JSON/schema validation and exact-byte identity for caller-selected pairs |
+| Spdx.Expressions/Registry/Internal | Bounded acquisition, JSON/schema validation, display metadata and exact-byte identity for catalogue pairs |
 | Spdx.Expressions/Validation | Complete occurrence collection and bounded diagnostics |
+| Spdx.Expressions/Resolution | Document-scoped definition and alias indexes, lookup outcomes and provenance |
 | Spdx.Expressions/Formatting | Shared renderer for spacing and opt-in catalogue casing |
 | Spdx.Expressions/Internal | Explicit-stack syntax traversal shared by operations |
 | Spdx.Expressions/Data | Exact upstream source bytes, provenance and notices |
@@ -35,7 +46,8 @@ Public types always use Spdx.Expressions; folder names do not change the API nam
 Internal shared helpers use Spdx.Expressions.Internal. AST constructors are non-public.
 Collections do not expose mutable storage. Options are immutable and operations have
 no shared mutable request state. The embedded registry is a lazy, thread-safe immutable
-snapshot. External memory and stream paths share document parsing and pair checks.
+snapshot. Embedded resources and external memory and stream inputs share document parsing,
+display metadata extraction and pair checks. The embedded snapshot also verifies its pinned identity.
 Each load owns its byte snapshots and budgets, then constructs an independent immutable
 registry. Parse, ordinary Format and AST traversal work independently of the catalogue.
 Validation and opt-in canonical casing each use their explicitly supplied registry.

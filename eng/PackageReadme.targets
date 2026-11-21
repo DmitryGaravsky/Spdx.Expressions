@@ -12,14 +12,14 @@
       <Code Type="Fragment" Language="cs"><![CDATA[
         string source = File.ReadAllText(SourcePath);
         string prefix = RepositoryUrl.TrimEnd('/') + "/blob/" + Revision + "/";
-        // Authored documentation uses inline Markdown links with repository-relative paths.
-        string result = Regex.Replace(source, @"(?m)(^```[^\r\n]*\r?\n[\s\S]*?^```[ \t]*\r?$)|(\[[^\]]*\]\()([^)]+)(\))", match => {
+        // Match destinations independently so a linked badge exposes both the image URL and its link.
+        string result = Regex.Replace(source, @"(?m)(^```[^\r\n]*\r?\n[\s\S]*?^```[ \t]*\r?$)|\]\(([^)\r\n]+)\)", match => {
             if(match.Groups[1].Success)
                 return match.Value;
-            string target = match.Groups[3].Value;
+            string target = match.Groups[2].Value;
             if(target.StartsWith("#", StringComparison.Ordinal) || Uri.TryCreate(target, UriKind.Absolute, out _))
                 return match.Value;
-            return match.Groups[2].Value + prefix + target + match.Groups[4].Value;
+            return "](" + prefix + target + ")";
         });
         Directory.CreateDirectory(Path.GetDirectoryName(OutputPath));
         File.WriteAllText(OutputPath, result, new System.Text.UTF8Encoding(false));

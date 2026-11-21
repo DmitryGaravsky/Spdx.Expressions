@@ -136,6 +136,39 @@ namespace Spdx.Expressions.Tests {
             Assert.That(SpdxLicenseRegistry.Load("["u8.ToArray(), exceptions).Status, Is.EqualTo(SpdxRegistryLoadStatus.InvalidData));
             Assert.That(SpdxLicenseRegistry.Default, Is.SameAs(embedded));
         }
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OptionalDisplayFieldsPreserveAcceptedExternalEntries(bool useStreams) {
+            byte[] licenses = """
+                {"licenseListVersion":"test","licenses":[
+                  {"licenseId":"MIT","isDeprecatedLicenseId":false,"name":{"name":"nested"},"reference":42,"seeAlso":["first",{}, "last"]},
+                  {"licenseId":"Custom","isDeprecatedLicenseId":true,"seeAlso":[" b ",""," b "],"ref\u0065rence":"local#1","name":" A\u00e9 "}]}
+                """u8.ToArray();
+            byte[] exceptions = """
+                {"licenseListVersion":"test","exceptions":[
+                  {"seeAlso":{"nested":["x"]},"licenseExceptionId":"Empty","isDeprecatedLicenseId":false},
+                  {"name":"","reference":" x ","seeAlso":["z","a"],"licenseExceptionId":"Rich","isDeprecatedLicenseId":false}]}
+                """u8.ToArray();
+            var loaded = RegistryLoadVectors.LoadPair(licenses, exceptions, options: null, useStreams);
+            Assert.That(loaded.Status, Is.EqualTo(SpdxRegistryLoadStatus.Success));
+            var registry = loaded.Registry!;
+            Assert.That(registry.TryGetLicense("mit", out var malformed), Is.True);
+            Assert.That(malformed!.Name, Is.Null);
+            Assert.That(malformed.Reference, Is.Null);
+            Assert.That(malformed.SeeAlso, Is.Empty);
+            Assert.That(registry.TryGetLicense("custom", out var custom), Is.True);
+            Assert.That((custom!.Name, custom.Reference, custom.IsDeprecated), Is.EqualTo((" Aé ", "local#1", true)));
+            Assert.That(custom.SeeAlso, Is.EqualTo(new[] { " b ", "", " b " }));
+            RegistryTests.AssertReadOnly((IList)custom.SeeAlso);
+            Assert.That(registry.TryGetException("Empty", out var empty), Is.True);
+            Assert.That(empty!.Name, Is.Null);
+            Assert.That(empty.Reference, Is.Null);
+            Assert.That(empty.SeeAlso, Is.Empty);
+            Assert.That(registry.TryGetException("Rich", out var rich), Is.True);
+            Assert.That((rich!.Name, rich.Reference), Is.EqualTo(("", " x ")));
+            Assert.That(rich.SeeAlso, Is.EqualTo(new[] { "z", "a" }));
+            RegistryTests.AssertReadOnly((IList)rich.SeeAlso);
+        }
         [TestCase("MINIMAL")]
         [TestCase("SLICE-PAYLOAD")]
         public void ReturnedRegistryOwnsItsDataAndSliceIdentity(string name) {

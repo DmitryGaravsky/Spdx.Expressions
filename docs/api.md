@@ -7,17 +7,23 @@ with the assembly for IDE completion. Parse, ordinary Format and AST traversal w
 without a registry. Validation and canonical casing each take an explicit registry.
 These operations accept optional cancellation tokens.
 
-This guide describes the 1.0.0 API baseline under the [1.x compatibility policy](compatibility.md).
+The public API follows the [1.x compatibility policy](compatibility.md).
 Parse, Validate, ordinary Format and the embedded registry were available in 0.1.0.
 The Load overloads, EnumerateNodes, SpdxExpressionWalker and FormatCanonicalCasing
 are available starting with 1.0.0.
+Version 1.1.0 adds the license field reader, document-scoped reference context and
+`Name`, `Reference` and `SeeAlso` on both catalogue entry types.
+See [names and links](catalogue.md#names-and-links) for their types and external-data handling.
 
 ## Operations
 
 | Entry point | Input | Result |
 | --- | --- | --- |
 | `SpdxExpressionParser.Parse` | String, optional `SpdxParseOptions` | `SpdxParseResult` |
+| `SpdxLicenseFieldReader.Read` | Nullable string, optional `SpdxParseOptions` | `SpdxLicenseFieldResult` |
 | `SpdxExpressionValidator.Validate` | `SpdxParsedExpression`, registry, optional `SpdxValidationOptions` | `SpdxValidationResult` |
+| `SpdxReferenceContext.Create` | Available document identities, license definitions, document bindings, optional context budgets | Reusable offline reference context |
+| `context.Resolve` | Parsed expression and source document identity | Read-only list of `SpdxReferenceResolution` in source order |
 | `SpdxExpressionFormatter.Format` | `SpdxParsedExpression` | String |
 | `SpdxExpressionFormatter.FormatCanonicalCasing` | `SpdxParsedExpression`, explicit registry | String |
 | `SpdxLicenseRegistry.Default` | None | Shared immutable embedded catalogue |
@@ -25,6 +31,68 @@ are available starting with 1.0.0.
 | `SpdxExpressionNode.EnumerateNodes` | Root or subtree | Lazy `IEnumerable<SpdxExpressionNode>` of original nodes |
 | `SpdxExpressionWalker.Walk` | Root or subtree | Synchronous typed callbacks; no result value |
 | `TryGetLicense` / `TryGetException` | Identifier string | Boolean and nullable entry through an out parameter |
+
+## Document-scoped reference resolution
+
+For a source document A, `LicenseRef-X` selects X in A. For
+`DocumentRef-V:LicenseRef-X`, first look up V in A's external document declarations,
+then look up X in that target. A second source document may bind V to a different
+target. A failed external lookup leaves the occurrence unresolved, even if A has an
+identically named definition. The application supplies the document identities,
+extracted licensing information and external bindings. It owns document acquisition
+and checksum verification. See [SPDX 2.3.1 document references](https://spdx.github.io/spdx-spec/v2.3.1/document-creation-information/#66-external-document-references-field)
+and [extracted licensing information](https://spdx.github.io/spdx-spec/v2.3.1/other-licensing-information-detected/).
+
+Supply opaque, nonempty document identities and the ID components as they appear on
+the AST. For `DocumentRef-V:LicenseRef-X`, the binding alias is `"V"` and the
+definition's ID is `"X"`. All keys use ordinal case-sensitive comparison. A
+`SpdxLicenseDefinition` carries its owning document and verbatim nonempty extracted
+text, with optional name and cross-reference. The context indexes the supplied data
+once. `Resolve` can operate on a successful parse before or after catalogue validation.
+
+| Resolution status | Evidence |
+| --- | --- |
+| `Resolved` | The target document contains one definition for this ID. The result exposes it. |
+| `UnknownDocumentAlias` | The source document has no such binding. |
+| `DuplicateBinding` | The source document contains multiple bindings for the alias, including identical repeats. |
+| `DocumentUnavailable` | The binding identifies a target document whose contents were not supplied. |
+| `DefinitionMissing` | The target document is available and has no definition for the license ID. |
+| `DuplicateDefinition` | The target declares the license ID multiple times, including identical repeats. |
+
+Every result retains the original AST occurrence, component spans and source document
+identity. Repeated references produce separate results. Unknown and duplicate aliases
+have no unique target identity. The other outcomes include the target identity, and
+only `Resolved` includes a definition. A catalogue ID or an expression without any
+references contributes no rows. An unlisted source document is an argument error.
+
+By default, context creation accepts up to 65,536 entries across all three inputs
+and 16,777,216 UTF-16 code units across their string fields, counting repeats.
+`SpdxReferenceContextOptions` configures these inclusive budgets. Exceeding either
+raises `ArgumentOutOfRangeException`. Creation and resolution support cancellation.
+The [runnable reference example](usage.md#resolve-references-in-a-document) shows how to
+construct the context and use the definition returned for each occurrence.
+
+## License field values
+
+`SpdxLicenseFieldReader.Read(text, options, cancellationToken)` records the supplied
+text verbatim in `SourceText`. Use `Kind` to distinguish these outcomes.
+
+| Kind | Input | Expression and diagnostics |
+| --- | --- | --- |
+| Missing | null | No AST, empty diagnostics |
+| Empty | Zero-length string | No AST, empty diagnostics |
+| None / NoAssertion | Whole uppercase `NONE` / `NOASSERTION`, optionally padded with ASCII space, tab, CR or LF | No AST, empty diagnostics |
+| Expression | Syntactically complete expression | Native `SpdxParsedExpression`, empty diagnostics |
+| InvalidSyntax | Malformed expression, including whitespace-only text | No AST, one native syntax diagnostic |
+| LimitExceeded | The input or expression exceeds a parse budget | No AST, one native limit diagnostic |
+
+The full string counts toward `MaxInputLength`, including padding around special values.
+Identifier, node and nesting budgets apply when parsing expressions. Options are checked
+before cancellation for every input, including null. Cancellation throws
+`OperationCanceledException`. AST and diagnostic spans use UTF-16 offsets in `SourceText`.
+Lowercase `none` is an expression identifier candidate. A sentinel inside `MIT OR NONE`
+is a syntax error. Document-specific defaults and catalogue validation are separate
+consumer operations. See the [runnable field example](usage.md#read-a-license-field).
 
 ## Results and diagnostics
 
@@ -39,7 +107,8 @@ occurrences in source order within each list, including repetitions. Spans allow
 merging the lists into a single source order. Identifier occurrences report their
 License/Exception role, Known/Unknown/WrongKind lookup status, and canonical ID and
 deprecation flag only when known in the expected namespace. Plus validates the base ID.
-References are never looked up as official identifiers and are never resolved.
+Validate records custom references with their source spans. Applications can then request
+[document-scoped reference resolution](#document-scoped-reference-resolution).
 
 The flags are independent:
 

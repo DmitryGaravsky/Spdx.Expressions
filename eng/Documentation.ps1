@@ -21,7 +21,7 @@ function Get-DocumentLinks {
     param([string]$Text)
     # Ignore fenced code; examples and scripts can contain Markdown-looking literals.
     $prose = [regex]::Replace($Text, '(?ms)^```[^\n]*\n.*?^```\s*$', '')
-    foreach ($match in [regex]::Matches($prose, '\[[^\]]*\]\(([^)]+)\)')) {
+    foreach ($match in [regex]::Matches($prose, '\]\(([^)\r\n]+)\)')) {
         $match.Groups[1].Value
     }
 }

@@ -22,8 +22,9 @@ dotnet run
 For an existing application, run the package installation command from its project directory.
 Package restore requires access to NuGet.org. Library execution is offline.
 The quick start also works with 0.1.0. The catalogue loading, traversal and canonical
-casing examples require version 1.0.0 or later. To test a source checkout, use a
-verified [local package](#use-a-local-package).
+casing examples require version 1.0.0 or later. The field reader, catalogue display
+metadata and document-scoped reference lookup require 1.1.0 or later. To try the
+working copy before publication, use a verified [local package](#use-a-local-package).
 See the [compatibility policy](compatibility.md) for the 1.x guarantees.
 
 ## Run the examples
@@ -33,10 +34,16 @@ From a source checkout with the .NET 10 SDK selected by global.json:
 ```powershell
 dotnet run --project Spdx.Expressions.Examples -- quick-start
 dotnet run --project Spdx.Expressions.Examples -- syntax-error
+dotnet run --project Spdx.Expressions.Examples -- inspect-license-field
+dotnet run --project Spdx.Expressions.Examples -- license-field
+dotnet run --project Spdx.Expressions.Examples -- resolve-references
+dotnet run --project Spdx.Expressions.Examples -- diagnostic-report
 ```
 
 Replace the final argument with any scenario name below. Omitting it runs `quick-start`.
-The [example source](../Spdx.Expressions.Examples/Program.cs) uses only the public API.
+For a package-only application, copy the scenario's complete C# block into `Program.cs`
+and run `dotnet run` from the application directory. The named runner lives in the
+[examples project](../Spdx.Expressions.Examples/Program.cs).
 Each C# block is a complete console program; the verification pipeline checks it against
 the corresponding source region, compiles each block independently against the actual nupkg,
 and compares both the runner and standalone program output with the text shown here.
@@ -44,19 +51,22 @@ The [quick-start program](../README.md#get-started) covers successful parsing an
 
 ## Use a local package
 
-To test changes from a source checkout, use PowerShell 7 to build and verify a local package:
+From the checkout root, use PowerShell 7 to give each local build its own prerelease
+version. NuGet can then distinguish it from earlier builds already in the package cache.
 
 ```powershell
-./eng/verify.ps1
-$run = Get-Content ./artifacts/latest-verification.json -Raw | ConvertFrom-Json
+$localVersion = '1.1.0-local-' + [Guid]::NewGuid().ToString('N')
+$output = Join-Path 'artifacts/verification' $localVersion
+./eng/verify.ps1 -Version $localVersion -OutputDirectory $output
+$run = Get-Content (Join-Path $output 'run.json') -Raw | ConvertFrom-Json
 if ($run.status -ne 'Passed') { throw 'Package verification did not pass.' }
 $package = (Resolve-Path -LiteralPath $run.package).Path
 $feed = Split-Path $package -Parent
 $version = $run.version
 ```
 
-Create a console application in a new directory outside the checkout. Keep the variables
-above in the same PowerShell session; replace the example destination with your own new path:
+In the same PowerShell session, create a console application outside the checkout and
+install the exact version from the verified feed.
 
 ```powershell
 $app = Join-Path ([IO.Path]::GetTempPath()) ('SpdxExample-' + [Guid]::NewGuid().ToString('N'))
@@ -64,7 +74,7 @@ dotnet new console --name SpdxExample --framework net10.0 --output $app --no-res
 dotnet add "$app/SpdxExample.csproj" package Spdx.Expressions --version "[$version]" --source $feed
 ```
 
-Replace Program.cs with the [quick-start code](../README.md#get-started), then run:
+Replace the new application's `Program.cs` with [the field inspection example](../README.md#inspect-a-license-field), then run
 
 ```powershell
 dotnet run --project "$app/SpdxExample.csproj" --no-restore
@@ -75,6 +85,37 @@ selects its local feed; no published package is required. Library execution is o
 building the repository may need development dependencies. See [Testing](testing.md) for
 local-feed restore and isolated SDK execution. Ordinary commands above use your normal SDK
 environment; repository verification runs the documented isolation guards.
+
+## Read a license field
+
+Run `dotnet run --project Spdx.Expressions.Examples -- license-field` from the checkout.
+`SpdxLicenseFieldReader.Read` classifies
+nullable metadata strings. Use `Expression` to inspect a parsed tree or `Diagnostics`
+to locate a failure in the original text.
+
+<!-- example: license-field -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+string?[] fields = [null, "", " ", "NONE", " NOASSERTION ", " MIT OR Apache-2.0 "];
+foreach(string? text in fields) {
+    var field = SpdxLicenseFieldReader.Read(text);
+    string source = field.SourceText is null ? "<absent>" : $"'{field.SourceText}'";
+    Console.WriteLine($"{source} -> {field.Kind}");
+}
+```
+
+Expected output:
+
+```text
+<absent> -> Missing
+'' -> Empty
+' ' -> InvalidSyntax
+'NONE' -> None
+' NOASSERTION ' -> NoAssertion
+' MIT OR Apache-2.0 ' -> Expression
+```
 
 ## Handle a syntax error
 
@@ -129,8 +170,8 @@ Error: SPDX_ID_UNKNOWN_LICENSE
 
 ## Keep references unresolved
 
-Scenario: `reference`. A custom reference is not an unknown official identifier. Its presence requires separate
-handling by your application; the library does not look up or resolve its target.
+Scenario: `reference`. Validation records each custom reference. To look up its definition,
+pass the parsed expression to a [reference context](#resolve-references-in-a-document).
 
 <!-- example: reference -->
 ```csharp
@@ -154,6 +195,75 @@ Identifier errors: False
 Unresolved references: True
 License component: X
 ```
+
+## Resolve references in a document
+
+Run `dotnet run --project Spdx.Expressions.Examples -- resolve-references` from the checkout.
+Both documents define `LicenseRef-X`. The qualifier in the second occurrence selects
+the vendor's definition. The third occurrence uses the binding to `archive`, a
+document the application has yet to supply.
+
+<!-- example: resolve-references -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var parsed = SpdxExpressionParser.Parse(" LicenseRef-X OR DocumentRef-D:LicenseRef-X OR DocumentRef-E:LicenseRef-X");
+if(parsed.Expression is not { } expression)
+    return;
+var context = SpdxReferenceContext.Create(
+    availableDocuments: ["app", "vendor"],
+    definitions: [new("app", "X", "Application terms."), new("vendor", "X", "Vendor terms.")],
+    bindings: [new("app", "D", "vendor"), new("app", "E", "archive")]);
+foreach(var result in context.Resolve(expression, "app")) {
+    var span = result.Occurrence.Span;
+    string spelling = expression.SourceText.Substring(span.Start, span.Length);
+    Console.WriteLine($"{spelling} @{span.Start} {result.SourceDocumentIdentity} -> {result.TargetDocumentIdentity} {result.Status}");
+    if(result.Definition is { } definition)
+        Console.WriteLine(definition.ExtractedText);
+}
+```
+
+Expected output:
+
+```text
+LicenseRef-X @1 app -> app Resolved
+Application terms.
+DocumentRef-D:LicenseRef-X @17 app -> vendor Resolved
+Vendor terms.
+DocumentRef-E:LicenseRef-X @47 app -> archive DocumentUnavailable
+```
+
+Use the document namespace as its identity when importing SPDX documents. The
+context treats identities as nonempty opaque strings and compares them ordinally.
+The application supplies available documents and checks external document checksums
+and provenance. See SPDX 2.3.1 [document namespaces and external references](https://spdx.github.io/spdx-spec/v2.3.1/document-creation-information/#65-spdx-document-namespace-field)
+and [extracted licensing information](https://spdx.github.io/spdx-spec/v2.3.1/other-licensing-information-detected/).
+
+Pass only the components after `LicenseRef-` and `DocumentRef-` in definitions
+and bindings. The expression profile accepts `[A-Za-z0-9.-]+` for both, with exact
+case. Every character supplied is literal. For example, the component `LicenseRef-X`
+would match the expression `LicenseRef-LicenseRef-X`. Names, extracted text
+and optional cross-reference strings retain their original spelling and whitespace.
+
+Each available document must be listed once, including an empty document. A definition
+or binding must name an available owner. Null entries, missing required strings,
+empty extracted text, invalid components and repeated document identities cause
+an argument exception at creation. Repeated alias and license keys, including
+identical declarations, give `DuplicateBinding` and `DuplicateDefinition` for
+affected occurrences. Other keys remain usable.
+
+Resolve requires an available source. An undeclared alias gives `UnknownDocumentAlias`,
+a declared but unavailable target gives `DocumentUnavailable`, and an available
+target lacking the ID gives `DefinitionMissing`. A local definition is considered
+only for an unqualified reference or a binding to that same document.
+
+The context indexes each sequence once. `SpdxReferenceContextOptions` defaults to
+65,536 entries and 16,777,216 UTF-16 units summed across all input string fields,
+including repeats. Limits are positive and inclusive. Invalid or exceeded limits
+raise `ArgumentOutOfRangeException`. Resolution traverses the bounded parse tree once
+and returns one result per occurrence, independent of validation diagnostics.
+Both operations accept a cancellation token and throw `OperationCanceledException`.
 
 ## Report deprecation warnings
 
@@ -295,6 +405,79 @@ Unresolved references: True
 Diagnostics truncated: True
 Identifiers: 3; references: 1
 Warning: SPDX_ID_DEPRECATED
+```
+
+## Report syntax and validation diagnostics
+
+Run `dotnet run --project Spdx.Expressions.Examples -- diagnostic-report` from the checkout.
+The report uses half-open UTF-16 ranges in the original input. For `MIT OR`, the missing
+operand has a zero-length range at the end of the string. The second expression parses
+successfully. With the embedded 3.29.0 catalogue, a two-message budget retains both the
+deprecation warning and the unknown-license error. A one-message budget retains the
+earlier warning. Compare the flags, ID occurrences and both source positions for the
+same reference across the two runs. To look up either occurrence, use the
+[document context](#resolve-references-in-a-document).
+
+<!-- example: diagnostic-report -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+foreach(string source in new[] { "MIT OR", "GPL-2.0 OR LicenseRef-X OR Unknown-1.0 OR LicenseRef-X" }) {
+    var parsed = SpdxExpressionParser.Parse(source);
+    Console.WriteLine($"Source: {source}");
+    Console.WriteLine($"Parse: {parsed.Status}, AST: {parsed.Expression?.Root.Kind.ToString() ?? "absent"}");
+    foreach(var diagnostic in parsed.Diagnostics)
+        WriteDiagnostic(diagnostic);
+    if(parsed.Expression is not { } expression)
+        continue;
+    foreach(int budget in new[] { 2, 1 }) {
+        var options = new SpdxValidationOptions { MaxDiagnostics = budget };
+        var validation = SpdxExpressionValidator.Validate(expression, SpdxLicenseRegistry.Default, options);
+        Console.WriteLine($"MaxDiagnostics={budget}, DiagnosticsTruncated={validation.DiagnosticsTruncated}");
+        foreach(var diagnostic in validation.Diagnostics)
+            WriteDiagnostic(diagnostic);
+        Console.WriteLine($"HasIdentifierErrors={validation.HasIdentifierErrors}, HasUnresolvedReferences={validation.HasUnresolvedReferences}");
+        foreach(var id in validation.IdentifierOccurrences)
+            Console.WriteLine($"  {id.LookupStatus} ID {id.Identifier} {Range(id.Span)}");
+        foreach(var reference in validation.References) {
+            var span = reference.Span;
+            string spelling = source.Substring(span.Start, span.Length);
+            Console.WriteLine($"  Reference {spelling} {Range(span)} (resolution not attempted)");
+        }
+    }
+}
+static void WriteDiagnostic(SpdxDiagnostic diagnostic) {
+    Console.WriteLine($"  {diagnostic.Severity} {diagnostic.Code} {Range(diagnostic.Span)}");
+}
+static string Range(SpdxSourceSpan span) {
+    return $"[{span.Start}..{span.Start + span.Length})";
+}
+```
+
+Expected output:
+
+```text
+Source: MIT OR
+Parse: InvalidSyntax, AST: absent
+  Error SPDX_PARSE_EXPECTED_OPERAND [6..6)
+Source: GPL-2.0 OR LicenseRef-X OR Unknown-1.0 OR LicenseRef-X
+Parse: Success, AST: Or
+MaxDiagnostics=2, DiagnosticsTruncated=False
+  Warning SPDX_ID_DEPRECATED [0..7)
+  Error SPDX_ID_UNKNOWN_LICENSE [27..38)
+HasIdentifierErrors=True, HasUnresolvedReferences=True
+  Known ID GPL-2.0 [0..7)
+  Unknown ID Unknown-1.0 [27..38)
+  Reference LicenseRef-X [11..23) (resolution not attempted)
+  Reference LicenseRef-X [42..54) (resolution not attempted)
+MaxDiagnostics=1, DiagnosticsTruncated=True
+  Warning SPDX_ID_DEPRECATED [0..7)
+HasIdentifierErrors=True, HasUnresolvedReferences=True
+  Known ID GPL-2.0 [0..7)
+  Unknown ID Unknown-1.0 [27..38)
+  Reference LicenseRef-X [11..23) (resolution not attempted)
+  Reference LicenseRef-X [42..54) (resolution not attempted)
 ```
 
 ## Check the exception namespace

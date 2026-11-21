@@ -144,12 +144,12 @@ namespace Spdx.Expressions.Internal {
             var licenseEntries = new List<SpdxLicenseInfo>();
             foreach(var entry in licenses.Entries) {
                 cancellationToken.ThrowIfCancellationRequested();
-                licenseEntries.Add(new(entry.Identifier, entry.Deprecated));
+                licenseEntries.Add(new(entry.Identifier, entry.Deprecated, entry.Name, entry.Reference, entry.SeeAlso));
             }
             var exceptionEntries = new List<SpdxExceptionInfo>();
             foreach(var entry in exceptions.Entries) {
                 cancellationToken.ThrowIfCancellationRequested();
-                exceptionEntries.Add(new(entry.Identifier, entry.Deprecated));
+                exceptionEntries.Add(new(entry.Identifier, entry.Deprecated, entry.Name, entry.Reference, entry.SeeAlso));
             }
             return new SpdxLicenseRegistry(identity, licenseEntries, exceptionEntries, cancellationToken);
         }
@@ -215,6 +215,6 @@ namespace Spdx.Expressions.Internal {
             internal SpdxRegistryDiagnostic Diagnostic { get; }
         }
         sealed record ParsedDocument(string Version, int VersionOffset, List<Entry> Entries, HashSet<string> Identifiers);
-        readonly record struct Entry(string Identifier, bool Deprecated, int Offset);
+        readonly record struct Entry(string Identifier, bool Deprecated, int Offset, string? Name, string? Reference, IReadOnlyList<string>? SeeAlso);
     }
 }

@@ -7,8 +7,8 @@
 `SpdxLicenseRegistry.Default` is a thread-safe immutable snapshot of **v3.29.0**,
 not a claim about the newest list.
 There are 740 license entries and 86 exception entries. Lookup uses OrdinalIgnoreCase;
-enumeration uses ordinal canonical-ID ordering. Public entries contain only Identifier
-and IsDeprecated. Six upstream deprecated license entries contain a literal trailing `+`;
+enumeration uses ordinal canonical-ID ordering. Both entry types expose `Identifier`
+and `IsDeprecated`. Six upstream deprecated license entries contain a literal trailing `+`;
 lookup preserves them, while expression parsing treats plus as a suffix and validation
 checks the base ID. Upstream exceptions also use the field `isDeprecatedLicenseId`.
 
@@ -34,10 +34,27 @@ when results must stay tied to one dataset across upgrades. See the
 
 `TryGetLicense` and `TryGetException` use separate namespaces. They do not trim whitespace
 or apply aliases. A failed lookup returns false and a null entry. A null identifier throws
-`ArgumentNullException`. Full license texts are not embedded; entries are identifier and
-deprecation metadata, not license documents.
+`ArgumentNullException`.
 
 See [third-party notices](../THIRD-PARTY-NOTICES.md) for embedded data attribution.
+
+## Names and links
+
+Look up an ID with `TryGetLicense` or `TryGetException` to read the following properties on
+`SpdxLicenseInfo` or `SpdxExceptionInfo`. For example, the embedded entry for `MIT` has
+`Name` equal to `MIT License` and `Reference` equal to `https://spdx.org/licenses/MIT.html`.
+
+| Property | Catalogue field | Result |
+| --- | --- | --- |
+| `Name` | `name` | Display name, or null for an absent field or a non-string value. |
+| `Reference` | `reference` | Link to the catalogue record, or null for an absent field or a non-string value. In the embedded list it points to the SPDX record page. |
+| `SeeAlso` | `seeAlso` | Read-only list of additional link strings in source order, including duplicates. An absent field, a non-array value or any non-string element yields an empty list. |
+
+The loader keeps decoded strings verbatim, including empty strings and whitespace. It
+performs no URI validation or fetching. These optional fields follow the same projection
+for embedded and caller-selected data. Entries with missing or ill-typed display metadata
+still participate in lookup and validation. JSON, duplicate-key and resource checks apply
+to every value, including omitted display data.
 
 ## Load a caller-selected pair
 

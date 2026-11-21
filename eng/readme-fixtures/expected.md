@@ -1,6 +1,7 @@
 # Package README fixture
 
 [![Build](https://example.invalid/badge.svg)](https://example.invalid/build)
+[![Guide](https://example.invalid/guide.svg)](https://github.com/DmitryGaravsky/Spdx.Expressions/blob/0123456789abcdef0123456789abcdef01234567/docs/usage.md#examples)
 [Guide](https://github.com/DmitryGaravsky/Spdx.Expressions/blob/0123456789abcdef0123456789abcdef01234567/docs/usage.md#examples), [local anchor](#package-readme-fixture).
 [External](https://example.invalid/guide).
 
