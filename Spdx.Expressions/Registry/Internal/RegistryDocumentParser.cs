@@ -9,7 +9,8 @@ namespace Spdx.Expressions.Internal {
         const string ExceptionIdProperty = "licenseExceptionId";
         const string DeprecatedProperty = "isDeprecatedLicenseId";
         enum ObjectRole { Root, Entry, Ignored }
-        enum Field { Version, Collection, Identifier, Deprecated, Ignored }
+        enum Field { Version, Collection, Identifier, Deprecated, Name, Reference, SeeAlso, Ignored }
+        enum ArrayRole { Collection, SeeAlso, Ignored }
         readonly record struct Location(int Depth, int? Entry, string? Property);
         ref struct DocumentParser {
             readonly RegistryLoader loader;
@@ -50,6 +51,9 @@ namespace Spdx.Expressions.Internal {
                 string? identifier = null;
                 int identifierOffset = 0;
                 bool? deprecated = null;
+                string? displayName = null;
+                string? reference = null;
+                IReadOnlyList<string>? seeAlso = null;
                 int propertyIndex = 0;
                 Token end;
                 while(!reader.TryReadEnd((byte)'}', propertyIndex == 0, out end)) {
@@ -70,7 +74,7 @@ namespace Spdx.Expressions.Internal {
                             break;
                         case Field.Collection:
                             RequireType(value, TokenKind.Array, valueLocation);
-                            ReadArray(valueLocation, isCollection: true);
+                            ReadArray(valueLocation, ArrayRole.Collection);
                             break;
                         case Field.Identifier:
                             RequireType(value, TokenKind.String, valueLocation);
@@ -81,6 +85,15 @@ namespace Spdx.Expressions.Internal {
                             if(value.Kind is not (TokenKind.True or TokenKind.False))
                                 throw Invalid("PROPERTY_TYPE", PropertyTypeMessage, input, value.Offset, location.Entry, name);
                             deprecated = value.Kind == TokenKind.True;
+                            break;
+                        case Field.Name when value.Kind == TokenKind.String:
+                            displayName = reader.Decode(value);
+                            break;
+                        case Field.Reference when value.Kind == TokenKind.String:
+                            reference = reader.Decode(value);
+                            break;
+                        case Field.SeeAlso when value.Kind == TokenKind.Array:
+                            seeAlso = ReadArray(valueLocation, ArrayRole.SeeAlso);
                             break;
                         default:
                             ReadIgnoredValue(value, valueLocation);
@@ -96,9 +109,11 @@ namespace Spdx.Expressions.Internal {
                         throw Invalid("MISSING_PROPERTY", MissingPropertyMessage, input, end.Offset, property: collectionProperty);
                 }
                 else if(role == ObjectRole.Entry)
-                    FinishEntry(identifier, identifierOffset, deprecated, end.Offset, location.Entry);
+                    FinishEntry(identifier, identifierOffset, deprecated, end.Offset, location.Entry, displayName, reference, seeAlso);
             }
-            void ReadArray(Location location, bool isCollection) {
+            IReadOnlyList<string>? ReadArray(Location location, ArrayRole role) {
+                bool isCollection = role == ArrayRole.Collection;
+                List<string>? links = role == ArrayRole.SeeAlso ? new() : null;
                 int index = 0;
                 Token end;
                 while(!reader.TryReadEnd((byte)']', index == 0, out end)) {
@@ -110,18 +125,27 @@ namespace Spdx.Expressions.Internal {
                             throw Invalid("ENTRY_TYPE", EntryTypeMessage, input, value.Offset, index, collectionProperty);
                         ReadObject(ObjectRole.Entry, element);
                     }
-                    else ReadIgnoredValue(value, element);
+                    else if(links is not null && value.Kind == TokenKind.String)
+                        links.Add(reader.Decode(value));
+                    else {
+                        // One non-string omits the entire display list. Its contents still undergo all JSON checks.
+                        links = null;
+                        ReadIgnoredValue(value, element);
+                    }
                     index++;
                 }
                 CheckToken(end, location);
                 if(isCollection && index == 0)
                     throw Invalid("EMPTY_COLLECTION", EmptyCollectionMessage, input, end.Offset, property: collectionProperty);
+                if(links is null || links.Count == 0)
+                    return null;
+                return [.. links];
             }
             void ReadIgnoredValue(Token value, Location location) {
                 if(value.Kind == TokenKind.Object)
                     ReadObject(ObjectRole.Ignored, location);
                 else if(value.Kind == TokenKind.Array)
-                    ReadArray(location, isCollection: false);
+                    ReadArray(location, ArrayRole.Ignored);
             }
             Field ClassifyProperty(ObjectRole role, string name, int offset, int? index) {
                 if(role == ObjectRole.Root) {
@@ -139,6 +163,12 @@ namespace Spdx.Expressions.Internal {
                         return Field.Deprecated;
                     if(name == (isLicense ? ExceptionIdProperty : LicenseIdProperty))
                         throw Invalid("UNEXPECTED_PROPERTY", UnexpectedPropertyMessage, input, offset, index, name);
+                    return name switch {
+                        "name" => Field.Name,
+                        "reference" => Field.Reference,
+                        "seeAlso" => Field.SeeAlso,
+                        _ => Field.Ignored
+                    };
                 }
                 return Field.Ignored;
             }
@@ -183,7 +213,8 @@ namespace Spdx.Expressions.Internal {
             InputFailure InvalidIdentifier(int offset, int? index) {
                 return Invalid("INVALID_IDENTIFIER", InvalidIdentifierMessage, input, offset, index, identifierProperty);
             }
-            void FinishEntry(string? identifier, int identifierOffset, bool? deprecated, int closingOffset, int? index) {
+            void FinishEntry(string? identifier, int identifierOffset, bool? deprecated, int closingOffset, int? index,
+                string? name, string? reference, IReadOnlyList<string>? seeAlso) {
                 if(identifier is null)
                     throw Invalid("MISSING_PROPERTY", MissingPropertyMessage, input, closingOffset, index, identifierProperty);
                 if(!deprecated.HasValue)
@@ -192,7 +223,7 @@ namespace Spdx.Expressions.Internal {
                     throw InvalidIdentifier(identifierOffset, index);
                 if(!identifiers.Add(identifier))
                     throw Invalid("DUPLICATE_IDENTIFIER", DuplicateIdentifierMessage, input, identifierOffset, index, identifierProperty);
-                entries.Add(new(identifier, deprecated.Value, identifierOffset));
+                entries.Add(new(identifier, deprecated.Value, identifierOffset, name, reference, seeAlso));
             }
             void CheckToken(Token token, Location location, int? propertyIndex = null, int? arrayIndex = null,
                 bool isCollection = false, bool identifier = false) {

@@ -53,6 +53,12 @@ long fuzzing campaign or complete security audit.
 Mutation coverage assertions require all four seed expressions, all three operations per
 seed, every mutation character (including NUL and a surrogate), and insertion at EOF.
 
+Reference resolution tests reuse the same local IDs and external aliases across documents.
+They check the target identity, verbatim text and UTF-16 spans for each occurrence, all
+unresolved outcomes, duplicate declarations, context budgets and cancellation. The
+[document-scoped example](usage.md#resolve-references-in-a-document) exercises the public
+API through the packaged assembly.
+
 Six additional robustness cases exercise long mixed AND/OR chains, late reference/exception
 and error evidence after diagnostic truncation, and exact EOF failures after long chains.
 A separate bounded package study passed 4,096 independently constructed expressions,
@@ -114,7 +120,8 @@ Interpretation boundaries are deliberate:
   field sentinels are explicit profile choices. Diagnostic codes, UTF-16 coordinates and
   first-error arbitration are library contracts, not requirements imposed by Annex D.
 - D.1's tag:value single-line restriction belongs to document serialization. D.4.6 RDF
-  representation and reference resolution are outside this API and have no executable fixtures.
+  representation is outside the expression API. Document-scoped resolution has separate
+  fixtures for caller-supplied bindings and extracted definitions.
 - D.4.2/D.4.3 commutativity does not require sorting the source-preserving AST. Semantic
   equivalence, license compatibility and legal conclusions are outside these tests.
 
@@ -186,7 +193,7 @@ fixtures and data available in the source checkout.
 
 ```powershell
 ./eng/test-release.ps1
-./eng/prepare-release.ps1 -Tag v1.0.0
+./eng/prepare-release.ps1 -Tag v1.1.0
 ```
 
 The standalone script tests stable/prerelease tags, malformed versions, package

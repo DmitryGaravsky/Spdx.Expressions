@@ -6,14 +6,15 @@
 [![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](Spdx.Expressions/Spdx.Expressions.csproj)
 [![SPDX License List 3.29.0](https://img.shields.io/badge/SPDX%20License%20List-3.29.0-blue)](docs/catalogue.md)
 
-A standalone .NET 10 library for parsing, inspecting, validating and formatting SPDX license
-expressions while preserving source evidence. It retains original text alongside an
-immutable AST with exact spelling, explicit groups and source spans for diagnostics
-and application-specific analysis. It checks identifiers against a
-pinned offline SPDX License List or a caller-selected UTF-8 catalogue pair, and formats
-spacing while retaining grouping and operand order. Callers can also opt in to the supplied
-catalogue's casing for known identifiers. The library has no runtime NuGet dependencies
-or runtime network requests.
+Read SPDX license fields in .NET 10 and show where each result came from. Keep the
+original spelling and source positions, display names from an offline catalogue, and
+resolve custom license references against documents your application supplies.
+See the [1.1 example](#inspect-a-license-field) for a field containing both a listed
+license and a document-qualified reference.
+
+The parser retains an immutable syntax tree with explicit groups and operand order.
+Validation and canonical casing can use the pinned SPDX License List or a caller-selected
+catalogue. The library has no runtime NuGet dependencies or runtime network requests.
 
 The library targets **net10.0 only**. The syntax profile is SPDX-2.3.1 and the
 embedded catalogue is v3.29.0. These versions are independent of the package version.
@@ -33,11 +34,15 @@ Source: [DmitryGaravsky/Spdx.Expressions](https://github.com/DmitryGaravsky/Spdx
 - Process supplied expressions and catalogue JSON with configurable resource limits,
   stable diagnostic codes and cooperative cancellation.
 - Display consistent spacing and optionally apply catalogue spelling while preserving expression structure.
+- Show license and exception display names, record links and additional references from the selected
+  catalogue with the [entry metadata API](docs/catalogue.md#names-and-links).
 
 | Operation | What it establishes |
 | --- | --- |
 | Parse | The entire input follows the fixed syntax profile and configured limits |
+| [Read a license field](docs/usage.md#read-a-license-field) | The observed field is missing, empty, an explicit special value, an expression, or a syntax/limit failure |
 | Validate | Which identifiers exist in the supplied catalogue, plus all unresolved references |
+| [Resolve references](docs/api.md#document-scoped-reference-resolution) | Which caller-supplied definition each local or document-qualified license reference denotes |
 | Load | Whether a caller-selected licenses and exceptions pair meets the supported JSON schema and resource limits |
 | EnumerateNodes / Walk | Original syntax nodes in root-inclusive source order, without catalogue lookup |
 | Format | Consistent spacing and exact original identifier spelling |
@@ -107,6 +112,52 @@ The quick start also works with 0.1.0. The
 available starting with **1.0.0** and are absent from 0.1.0. See the
 [1.x compatibility policy](docs/compatibility.md) for API stability and catalogue updates.
 
+## Inspect a license field
+
+With **1.1.0 or later**, a metadata viewer can display the catalogue name for `mit`
+and the exact position and extracted text of a vendor's custom license in the same
+field. The application supplies the vendor document and verifies its checksum.
+From the checkout, run `dotnet run --project Spdx.Expressions.Examples -- inspect-license-field`.
+In a console project referencing the package, use this program as `Program.cs`.
+
+<!-- example: inspect-license-field -->
+```csharp
+using System;
+using Spdx.Expressions;
+
+var field = SpdxLicenseFieldReader.Read(" mit OR DocumentRef-V:LicenseRef-X ");
+if(field.Expression is not { } expression)
+    return;
+var registry = SpdxLicenseRegistry.Default;
+foreach(var node in expression.Root.EnumerateNodes()) {
+    if(node is SpdxLicenseExpression id && registry.TryGetLicense(id.Identifier, out var license))
+        Console.WriteLine($"{id.Identifier} = {license.Name}");
+}
+var context = SpdxReferenceContext.Create(
+    availableDocuments: ["app", "vendor"],
+    definitions: [new("vendor", "X", "Vendor terms.")],
+    bindings: [new("app", "V", "vendor")]);
+foreach(var result in context.Resolve(expression, "app")) {
+    var span = result.Occurrence.Span;
+    string spelling = expression.SourceText.Substring(span.Start, span.Length);
+    Console.WriteLine($"{spelling} @{span.Start} -> {result.TargetDocumentIdentity} ({result.Status})");
+    if(result.Definition is { } definition)
+        Console.WriteLine(definition.ExtractedText);
+}
+```
+
+Expected output:
+
+```text
+mit = MIT License
+DocumentRef-V:LicenseRef-X @8 -> vendor (Resolved)
+Vendor terms.
+```
+
+See the [reference lookup example](docs/usage.md#resolve-references-in-a-document)
+for an unavailable document and the [diagnostic report](docs/usage.md#report-syntax-and-validation-diagnostics)
+for syntax errors and truncated validation diagnostics.
+
 ## Documentation
 
 | Guide | Contents |
@@ -126,6 +177,6 @@ actual package. Local checks do not establish GitHub-hosted or cross-platform su
 
 The implementation is [MIT licensed](LICENSE), copyright (c) 2026 Dmitry Garavsky.
 The embedded catalogue retains its separate [upstream attribution](THIRD-PARTY-NOTICES.md).
-The library covers expression operations and catalogue selection. Reference resolution,
-AST serialization, automatic catalogue updates and legal-policy decisions are outside
-its scope.
+Reference resolution works offline with documents and bindings supplied by the application.
+The application owns document acquisition, external-document checksum verification and
+licensing decisions. AST serialization and automatic catalogue updates remain outside the library's scope.

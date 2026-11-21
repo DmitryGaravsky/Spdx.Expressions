@@ -119,12 +119,27 @@ namespace Spdx.Expressions.Tests {
         }
         [TestCase(false)]
         [TestCase(true)]
+        public void CancellationDuringFieldPadding(bool leading) {
+            string padding = new(' ', 32 * 1024 * 1024);
+            string input = leading ? padding + "NONE" : "NOASSERTION" + padding;
+            var options = new SpdxParseOptions { MaxInputLength = input.Length };
+            AssertCancellation(token => SpdxLicenseFieldReader.Read(input, options, token));
+        }
+        [TestCase(false)]
+        [TestCase(true)]
         public void CancellationDuringTraversal(bool format) {
             string input = string.Join(" OR ", Enumerable.Repeat("Unknown", 200_000));
             var expression = GrammarTests.Parse(input, new() { MaxInputLength = input.Length, MaxNodes = 200_001, MaxTokens = 400_000 });
             var registry = SpdxLicenseRegistry.Default;
             AssertCancellation(token => format ? SpdxExpressionFormatter.Format(expression, token) :
                 (object)SpdxExpressionValidator.Validate(expression, registry, new() { MaxDiagnostics = 1 }, token));
+        }
+        [Test]
+        public void CancellationDuringReferenceResolution() {
+            string input = string.Join(" OR ", Enumerable.Repeat("DocumentRef-D:LicenseRef-X", 100_000));
+            var expression = GrammarTests.Parse(input, new() { MaxInputLength = input.Length, MaxNodes = 100_001, MaxTokens = 200_000 });
+            var context = SpdxReferenceContext.Create(["source", "target"], [new("target", "X", "text")], [new("source", "D", "target")]);
+            AssertCancellation(token => context.Resolve(expression, "source", token));
         }
         [Test]
         public void CancellationDuringCanonicalFormatting() {

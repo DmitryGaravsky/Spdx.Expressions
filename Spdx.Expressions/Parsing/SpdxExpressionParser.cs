@@ -5,6 +5,9 @@ using System.Threading;
 namespace Spdx.Expressions {
     /// <summary>Parses the fixed SPDX-2.3.1 expression profile without consulting a registry.</summary>
     public static class SpdxExpressionParser {
+        internal const string NoneKeyword = "NONE";
+        internal const string NoAssertionKeyword = "NOASSERTION";
+        const int CancellationPollingMask = 255;
         /// <summary>Parses the entire string, retaining spelling, source ranges, order and explicit groups.</summary>
         /// <param name="text">The original expression, using only ASCII space, tab, CR or LF as whitespace.</param>
         /// <param name="options">Inclusive budgets, or defaults.</param>
@@ -18,10 +21,14 @@ namespace Spdx.Expressions {
             options ??= new SpdxParseOptions();
             options.Check();
             cancellationToken.ThrowIfCancellationRequested();
+            return ParseCore(text, 0, options, cancellationToken);
+        }
+        // The field reader may already have scanned the leading whitespace. Offsets still refer to the full input.
+        internal static SpdxParseResult ParseCore(string text, int start, SpdxParseOptions options, CancellationToken cancellationToken) {
             try {
                 if(text.Length > options.MaxInputLength)
                     throw Failure("LIMIT_EXCEEDED", new(0, text.Length));
-                var parser = new Parser(text, options, cancellationToken);
+                var parser = new Parser(text, start, options, cancellationToken);
                 var root = parser.ParseRoot();
                 cancellationToken.ThrowIfCancellationRequested();
                 var expression = new SpdxParsedExpression(text, root);
@@ -36,6 +43,14 @@ namespace Spdx.Expressions {
         }
         static bool IsWhitespace(char c) {
             return c is ' ' or '\t' or '\r' or '\n';
+        }
+        internal static int SkipWhitespace(string text, int position, CancellationToken cancellationToken) {
+            while(position < text.Length && IsWhitespace(text[position])) {
+                if((position & CancellationPollingMask) == 0)
+                    cancellationToken.ThrowIfCancellationRequested();
+                position++;
+            }
+            return position;
         }
         // Only deliberate input failures cross this boundary. Programming/process exceptions propagate.
         static InputFailure Failure(string code, SpdxSourceSpan span) {
@@ -78,12 +93,11 @@ namespace Spdx.Expressions {
         }
         enum TokenKind { End, Id, Reference, And, Or, With, Sentinel, Plus, Open, Close }
         readonly record struct Token(TokenKind Kind, SpdxSourceSpan Span, SpdxSourceSpan? Document = null, SpdxSourceSpan? License = null);
-        sealed class Parser(string text, SpdxParseOptions options, CancellationToken cancellation) {
+        sealed class Parser(string text, int start, SpdxParseOptions options, CancellationToken cancellation) {
             const string DocumentReferencePrefix = "DocumentRef-";
             const string LicenseReferencePrefix = "LicenseRef-";
             const int LongestReservedTokenLength = 11;
-            const int CancellationPollingMask = 255;
-            int position;
+            int position = start;
             int tokens;
             int nodes;
             int depth;
@@ -198,10 +212,7 @@ namespace Spdx.Expressions {
             }
             void Next() {
                 cancellation.ThrowIfCancellationRequested();
-                while(position < text.Length && IsWhitespace(text[position])) {
-                    Poll();
-                    position++;
-                }
+                position = SkipWhitespace(text, position, cancellation);
                 int start = position;
                 if(start == text.Length) {
                     current = new(TokenKind.End, new(start, 0));
@@ -239,7 +250,7 @@ namespace Spdx.Expressions {
                     "AND" => TokenKind.And,
                     "OR" => TokenKind.Or,
                     "WITH" => TokenKind.With,
-                    "NONE" or "NOASSERTION" => TokenKind.Sentinel,
+                    NoneKeyword or NoAssertionKeyword => TokenKind.Sentinel,
                     _ => TokenKind.Id
                 };
                 var span = new SpdxSourceSpan(start, position - start);

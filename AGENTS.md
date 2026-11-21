@@ -9,11 +9,13 @@ must reference this file rather than duplicate it. Preserve unrelated concurrent
 Spdx.Expressions is a standalone net10.0 library implementing Parse, Validate and Format
 for the fixed SPDX-2.3.1 expression profile. It preserves immutable source evidence and
 supports the pinned offline SPDX v3.29.0 catalogue and caller-selected UTF-8 catalogue
-pairs loaded from memory or streams. It has no runtime NuGet dependencies and no
+pairs loaded from memory or streams. Its optional reference context resolves local and
+document-qualified license references against application-supplied definitions and bindings.
+It has no runtime NuGet dependencies and no
 dependency on application-specific readers, CLI or SBOM models.
 
 Work directly in this repository for authorized tasks. Integration, external consumers,
-reference resolution, serialization, automatic updates and
+external document acquisition, serialization, automatic updates and
 publication require their own tasks. External consumer testing is independent of this project.
 
 ## Git ownership
@@ -58,7 +60,8 @@ configured workflows do not prove that features work or hosted checks have passe
   Shared test settings belong in eng/Tests.props; package versions in Directory.Packages.props.
 - Target net10.0 only. Keep stable SDK selection explicit in global.json; version and roll-forward policy changes require renewed verification.
 - Group sources by responsibility: Parsing (parser/options/AST/results), Registry (embedded
-  catalogue/loading/identity/entries), Validation (validation/results), Formatting, and Internal.
+  catalogue/loading/identity/entries), Validation (validation/results), Resolution
+  (document-scoped context and outcomes), Formatting, and Internal.
   Public namespaces remain Spdx.Expressions regardless of folders. Internal shared helpers
   use Spdx.Expressions.Internal. Working package and assembly names are Spdx.Expressions.
 - Keep Parse, ordinary Format and AST traversal usable without initializing a registry.
@@ -76,8 +79,9 @@ configured workflows do not prove that features work or hosted checks have passe
   Fully consume input. Syntax/limit failures return one diagnostic and no partial AST.
 - Retain all identifier/reference occurrences, including repetitions. Diagnostic storage limits
   must not stop traversal, remove evidence or hide late errors/references from outcome flags.
-- Keep identifier errors, unresolved references and diagnostic truncation independent. Do not
-  infer usage permission, compatibility or resolved references from a successful operation.
+- Keep validation's identifier errors, reference presence and diagnostic truncation independent.
+  Resolve references only with an explicit document context. Preserve source identity, target
+  provenance and repeated occurrences. Successful lookup does not establish licensing permission.
 - Keep ordinary Format limited to spacing. FormatCanonicalCasing uses the supplied registry
   to change only known identifier spelling in its own namespace. Both preserve source
   evidence, suffixes, grouping and operand order.

@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text.Json;
 using System.Threading;
 using Spdx.Expressions.Internal;
 
@@ -26,25 +25,43 @@ namespace Spdx.Expressions {
     }
     /// <summary>A canonical entry in the license namespace.</summary>
     public sealed class SpdxLicenseInfo {
-        internal SpdxLicenseInfo(string identifier, bool deprecated) {
+        internal SpdxLicenseInfo(string identifier, bool deprecated, string? name, string? reference, IReadOnlyList<string>? seeAlso) {
             Identifier = identifier;
             IsDeprecated = deprecated;
+            Name = name;
+            Reference = reference;
+            SeeAlso = seeAlso ?? ReadOnlyCollection<string>.Empty;
         }
         /// <summary>Gets the catalogue's canonical spelling.</summary>
         public string Identifier { get; }
         /// <summary>Gets the catalogue's declared deprecation flag.</summary>
         public bool IsDeprecated { get; }
+        /// <summary>Gets the catalogue's display name, or null if the field is absent or is not a string.</summary>
+        public string? Name { get; }
+        /// <summary>Gets the catalogue's record link verbatim, or null if the field is absent or is not a string.</summary>
+        public string? Reference { get; }
+        /// <summary>Gets the catalogue's additional links verbatim in source order, or an empty list for absent or ill-typed data.</summary>
+        public IReadOnlyList<string> SeeAlso { get; }
     }
     /// <summary>A canonical entry in the exception namespace.</summary>
     public sealed class SpdxExceptionInfo {
-        internal SpdxExceptionInfo(string identifier, bool deprecated) {
+        internal SpdxExceptionInfo(string identifier, bool deprecated, string? name, string? reference, IReadOnlyList<string>? seeAlso) {
             Identifier = identifier;
             IsDeprecated = deprecated;
+            Name = name;
+            Reference = reference;
+            SeeAlso = seeAlso ?? ReadOnlyCollection<string>.Empty;
         }
         /// <summary>Gets the catalogue's canonical spelling.</summary>
         public string Identifier { get; }
         /// <summary>Gets the catalogue's declared deprecation flag for this exception.</summary>
         public bool IsDeprecated { get; }
+        /// <summary>Gets the catalogue's display name, or null if the field is absent or is not a string.</summary>
+        public string? Name { get; }
+        /// <summary>Gets the catalogue's record link verbatim, or null if the field is absent or is not a string.</summary>
+        public string? Reference { get; }
+        /// <summary>Gets the catalogue's additional links verbatim in source order, or an empty list for absent or ill-typed data.</summary>
+        public IReadOnlyList<string> SeeAlso { get; }
     }
     /// <summary>An immutable, offline catalogue of license and exception identifiers.</summary>
     public sealed class SpdxLicenseRegistry {
@@ -143,56 +160,18 @@ namespace Spdx.Expressions {
             return exceptions.TryGetValue(identifier, out exception);
         }
         static SpdxLicenseRegistry LoadEmbedded() {
-            try {
-                var licenseEntries = Read("licenses", "licenseId", LicenseHash)
-                    .Select(x => new SpdxLicenseInfo(x.Id, x.Deprecated)).ToList();
-                var exceptionEntries = Read("exceptions", "licenseExceptionId", ExceptionHash)
-                    .Select(x => new SpdxExceptionInfo(x.Id, x.Deprecated)).ToList();
-                if(licenseEntries.Count == 0 || exceptionEntries.Count == 0 ||
-                    licenseEntries.Select(x => x.Identifier).Intersect(exceptionEntries.Select(x => x.Identifier), StringComparer.OrdinalIgnoreCase).Any())
+            using(var licenses = OpenEmbedded("licenses"))
+            using(var exceptions = OpenEmbedded("exceptions")) {
+                var registry = Load(licenses, exceptions).Registry;
+                if(registry is null || registry.Identity.LicenseListVersion != Version ||
+                    registry.Identity.LicensesSha256 != LicenseHash || registry.Identity.ExceptionsSha256 != ExceptionHash)
                     throw new InvalidOperationException(CorruptMessage);
-                var identity = new SpdxRegistryIdentity(Version, LicenseHash, ExceptionHash);
-                return new(identity, licenseEntries, exceptionEntries, CancellationToken.None);
-            }
-            catch(Exception error)
-                when(error is JsonException or KeyNotFoundException or FormatException or ArgumentException) {
-                throw new InvalidOperationException(CorruptMessage, error);
+                return registry;
             }
         }
-        static List<(string Id, bool Deprecated)> Read(string collection, string idProperty, string expectedHash) {
-            byte[] data;
-            using(var stream = typeof(SpdxLicenseRegistry).Assembly.GetManifestResourceStream($"Spdx.Expressions.Data.{collection}.json")
-                ?? throw new InvalidOperationException(CorruptMessage))
-            using(var bytes = new MemoryStream()) {
-                stream.CopyTo(bytes);
-                data = bytes.ToArray();
-            }
-            if(Convert.ToHexStringLower(SHA256.HashData(data)) != expectedHash)
-                throw new InvalidOperationException(CorruptMessage);
-            using(var json = JsonDocument.Parse(data)) {
-                var root = json.RootElement;
-                if(root.GetProperty("licenseListVersion").GetString() != Version)
-                    throw new InvalidOperationException(CorruptMessage);
-                var entries = new List<(string, bool)>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach(var entry in root.GetProperty(collection).EnumerateArray()) {
-                    string? id = entry.GetProperty(idProperty).GetString();
-                    bool deprecated = entry.GetProperty("isDeprecatedLicenseId").GetBoolean();
-                    if(string.IsNullOrEmpty(id) || !seen.Add(id) || id.StartsWith("LicenseRef-", StringComparison.Ordinal) ||
-                        id.StartsWith("DocumentRef-", StringComparison.Ordinal))
-                        throw new InvalidOperationException(CorruptMessage);
-                    // Six upstream deprecated license entries include a trailing plus in their canonical ID.
-                    var candidate = collection == "licenses" && id.EndsWith('+') ? id.AsSpan(0, id.Length - 1) : id.AsSpan();
-                    if(candidate.IsEmpty)
-                        throw new InvalidOperationException(CorruptMessage);
-                    foreach(char character in candidate) {
-                        if(!SpdxExpressionParser.IsIdentifierCharacter(character))
-                            throw new InvalidOperationException(CorruptMessage);
-                    }
-                    entries.Add((id, deprecated));
-                }
-                return entries;
-            }
+        static Stream OpenEmbedded(string collection) {
+            return typeof(SpdxLicenseRegistry).Assembly.GetManifestResourceStream($"Spdx.Expressions.Data.{collection}.json")
+                ?? throw new InvalidOperationException(CorruptMessage);
         }
     }
 }
