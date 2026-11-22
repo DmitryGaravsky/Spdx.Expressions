@@ -21,12 +21,15 @@ Both exact JSON files come from the same
 
 Source paths, byte lengths, tag/commit, import date and notice provenance are in the
 shipped `data/manifest.json`. The exact JSON and upstream notices are embedded and
-also included as package data. Corrupt resources cause InvalidOperationException,
-not an empty catalogue or a user-input error.
+also included as package data. On first access, `Default` verifies the length and SHA-256
+of each resource before decoding its entries. It checks the declared list version in both
+files and caches the completed snapshot. A missing or altered resource causes
+`InvalidOperationException`.
 
 Updating the embedded snapshot is a manual development task. Import both exact
-files from one reviewed commit, update the manifest and pinned hashes, review
-notices, and rerun all entry/hash/package checks.
+files from one reviewed commit, update the manifest and pinned lengths and hashes, review
+notices, and compare every embedded entry and its display fields with both external
+`Load` overloads. Rerun the package checks.
 Within 1.x, embedded catalogue updates require a minor release and an explicit
 change summary; patch releases retain the same bytes. Use a caller-selected pair
 when results must stay tied to one dataset across upgrades. See the
@@ -53,8 +56,8 @@ Look up an ID with `TryGetLicense` or `TryGetException` to read the following pr
 The loader keeps decoded strings verbatim, including empty strings and whitespace. It
 performs no URI validation or fetching. These optional fields follow the same projection
 for embedded and caller-selected data. Entries with missing or ill-typed display metadata
-still participate in lookup and validation. JSON, duplicate-key and resource checks apply
-to every value, including omitted display data.
+still participate in lookup and validation. For caller-selected inputs, JSON, duplicate-key
+and resource checks apply to every value, including omitted display data.
 
 ## Load a caller-selected pair
 

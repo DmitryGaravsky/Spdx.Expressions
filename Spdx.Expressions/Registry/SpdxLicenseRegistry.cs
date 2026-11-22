@@ -5,6 +5,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using Spdx.Expressions.Internal;
 
@@ -66,6 +68,8 @@ namespace Spdx.Expressions {
     /// <summary>An immutable, offline catalogue of license and exception identifiers.</summary>
     public sealed class SpdxLicenseRegistry {
         const string Version = "3.29.0";
+        const int LicenseByteLength = 339_359;
+        const int ExceptionByteLength = 41_420;
         const string LicenseHash = "47d1cc681abe31166b342b6cc4aab13a6ba8ea5c48794697fe3bf8b1dbaf509a";
         const string ExceptionHash = "59ee7c150de521d635cbf9367b8cf543b8da6781ea3ac1c073d305524f84ada2";
         const string CorruptMessage = "The embedded SPDX catalogue is corrupt or inconsistent with its pinned identity.";
@@ -160,14 +164,56 @@ namespace Spdx.Expressions {
             return exceptions.TryGetValue(identifier, out exception);
         }
         static SpdxLicenseRegistry LoadEmbedded() {
-            using(var licenses = OpenEmbedded("licenses"))
-            using(var exceptions = OpenEmbedded("exceptions")) {
-                var registry = Load(licenses, exceptions).Registry;
-                if(registry is null || registry.Identity.LicenseListVersion != Version ||
-                    registry.Identity.LicensesSha256 != LicenseHash || registry.Identity.ExceptionsSha256 != ExceptionHash)
+            var licenses = ReadPinned("licenses", "licenseId"u8, LicenseByteLength, LicenseHash,
+                static (id, deprecated, name, reference, links) => new SpdxLicenseInfo(id, deprecated, name, reference, links));
+            var exceptions = ReadPinned("exceptions", "licenseExceptionId"u8, ExceptionByteLength, ExceptionHash,
+                static (id, deprecated, name, reference, links) => new SpdxExceptionInfo(id, deprecated, name, reference, links));
+            var identity = new SpdxRegistryIdentity(Version, LicenseHash, ExceptionHash);
+            return new SpdxLicenseRegistry(identity, licenses, exceptions, CancellationToken.None);
+        }
+        static List<T> ReadPinned<T>(string collection, ReadOnlySpan<byte> idProperty, int expectedLength, string expectedHash,
+            Func<string, bool, string?, string?, IReadOnlyList<string>?, T> createEntry) {
+            byte[] bytes;
+            using(var stream = OpenEmbedded(collection)) {
+                if(stream.Length != expectedLength)
                     throw new InvalidOperationException(CorruptMessage);
-                return registry;
+                bytes = GC.AllocateUninitializedArray<byte>(expectedLength);
+                stream.ReadExactly(bytes);
             }
+            // Only the reviewed, byte-for-byte identical resource can reach the embedded projection.
+            if(Convert.ToHexStringLower(SHA256.HashData(bytes)) != expectedHash)
+                throw new InvalidOperationException(CorruptMessage);
+            using(var document = JsonDocument.Parse(bytes)) {
+                var root = document.RootElement;
+                if(root.GetProperty("licenseListVersion"u8).GetString() != Version)
+                    throw new InvalidOperationException(CorruptMessage);
+                var rows = root.GetProperty(collection);
+                var entries = new List<T>(rows.GetArrayLength());
+                foreach(var row in rows.EnumerateArray()) {
+                    string id = row.GetProperty(idProperty).GetString()!;
+                    bool deprecated = row.GetProperty("isDeprecatedLicenseId"u8).GetBoolean();
+                    string? name = ReadOptionalString(row, "name"u8);
+                    string? reference = ReadOptionalString(row, "reference"u8);
+                    var links = ReadLinks(row);
+                    entries.Add(createEntry(id, deprecated, name, reference, links));
+                }
+                return entries;
+            }
+        }
+        static string? ReadOptionalString(JsonElement row, ReadOnlySpan<byte> property) {
+            return row.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString() : null;
+        }
+        static IReadOnlyList<string>? ReadLinks(JsonElement row) {
+            if(!row.TryGetProperty("seeAlso"u8, out var value) || value.ValueKind != JsonValueKind.Array || value.GetArrayLength() == 0)
+                return null;
+            var links = new List<string>(value.GetArrayLength());
+            foreach(var item in value.EnumerateArray()) {
+                if(item.ValueKind != JsonValueKind.String)
+                    return null;
+                links.Add(item.GetString()!);
+            }
+            return [.. links];
         }
         static Stream OpenEmbedded(string collection) {
             return typeof(SpdxLicenseRegistry).Assembly.GetManifestResourceStream($"Spdx.Expressions.Data.{collection}.json")

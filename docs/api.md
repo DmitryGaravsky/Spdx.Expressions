@@ -230,6 +230,9 @@ and [walker](usage.md#inspect-groups-and-exceptions) examples.
 Format produces single ASCII spaces around operators, no spaces inside explicit groups
 and no space before plus. It retains exact spelling, deprecated forms, references,
 repetitions and order. It does not consult a registry or simplify the expression.
+For a single license (including an adjacent `+`) or a local or document-qualified
+reference, the source text already has the required spacing if it contains no outer
+whitespace. Ordinary `Format` can return that text directly.
 
 | Input | Output |
 | --- | --- |

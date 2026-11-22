@@ -14,6 +14,11 @@ namespace Spdx.Expressions {
         /// <exception cref="OperationCanceledException">Cancellation was requested.</exception>
         public static string Format(SpdxParsedExpression expression, CancellationToken cancellationToken = default) {
             ArgumentNullException.ThrowIfNull(expression);
+            if(expression.Root is SpdxLicenseExpression or SpdxReferenceExpression &&
+                expression.Root.Span.Length == expression.SourceText.Length) {
+                cancellationToken.ThrowIfCancellationRequested();
+                return expression.SourceText;
+            }
             return Render(expression, null, cancellationToken);
         }
         /// <summary>Formats spacing and uses the supplied registry's spelling for known license and exception identifiers.</summary>

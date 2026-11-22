@@ -167,6 +167,7 @@ for syntax errors and truncated validation diagnostics.
 | [Syntax reference](docs/syntax.md) | Grammar policies, diagnostic codes, limits and cancellation |
 | [Catalogues](docs/catalogue.md) | Embedded snapshot, caller-selected schema, lookup and dataset identity |
 | [Compatibility](docs/compatibility.md) | Stable 1.x contracts, additive changes and catalogue update policy |
+| [Performance measurements](docs/testing.md#performance-measurements) | First catalogue access, field throughput and document-scoped lookup costs |
 
 For development, see [Contributing](CONTRIBUTING.md), [Architecture](docs/architecture.md),
 [Testing](docs/testing.md), [CI](docs/ci.md) and [Release](docs/release.md).

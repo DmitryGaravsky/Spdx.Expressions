@@ -12,6 +12,9 @@ namespace Spdx.Expressions.Tests {
         [TestCase("DocumentRef-d:LicenseRef-x WITH llvm-exception", "DocumentRef-d:LicenseRef-x WITH llvm-exception")]
         [TestCase("(( MIT))OR(MIT AND MIT)", "((MIT)) OR (MIT AND MIT)")]
         [TestCase("GPL-2.0 OR GPL-2.0", "GPL-2.0 OR GPL-2.0")]
+        [TestCase(" mit+", "mit+")]
+        [TestCase("LicenseRef-x\t", "LicenseRef-x")]
+        [TestCase("\r\nDocumentRef-d:LicenseRef-x ", "DocumentRef-d:LicenseRef-x")]
         public void IndependentGoldenOutputs(string input, string expected) {
             var expression = GrammarTests.Parse(input);
             Assert.That(SpdxExpressionFormatter.Format(expression), Is.EqualTo(expected));

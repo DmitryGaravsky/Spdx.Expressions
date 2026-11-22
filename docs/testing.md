@@ -133,7 +133,21 @@ local results.
 A bounded 68-input comparison on Windows used spdx-expression-parse 5.0.0 with
 spdx-license-ids 3.0.24 / spdx-exceptions 2.5.0, and Tethys.SPDX.ExpressionParser 2.2.0
 with Default options and case-insensitive lookup callbacks over the same 3.29.0 catalogue
-used here. This library matched the independently specified outcomes for all 68 inputs.
+used here. **68/68** counts inputs for which Spdx.Expressions met the independently
+specified expectations for its syntax profile. It accepted 32 inputs and rejected 36.
+The checks covered the parse outcome for every input, the expected tree on success
+and diagnostic positions where specified.
+
+Each pairwise tree comparison used only expressions accepted by both Spdx.Expressions
+and the parser in that row. The numerator counts matching trees within that subset.
+
+| Parser compared with Spdx.Expressions | Matching trees / jointly accepted expressions |
+| --- | --- |
+| spdx-expression-parse 5.0.0 | 20/20 |
+| Tethys.SPDX.ExpressionParser 2.2.0 | 19/23 |
+
+The four differing Tethys trees involved two omitted WITH clauses and two differences
+in reference recognition.
 ComparisonCounterexamples retains additional full-consumption and diagnostic-arbitration
 fixtures. No production behavior changed. Peers differ in catalogue checks, casing,
 whitespace, references and error handling; their acceptance is not this profile's contract.
@@ -141,6 +155,109 @@ The common AST comparison retained operator order, plus, WITH and leaf spelling,
 only explicit group wrappers and flattening same-operator chains. Full source/group/span
 contracts remain checked independently. This comparison is not a performance or security
 assessment; external comparator tools are not product dependencies.
+
+## Performance measurements
+
+On 22 November 2026, a single-threaded Release consumer measured the published
+NuGet packages on an Intel Core i7-12700H, Windows x64 build 26200, with SDK
+10.0.404, runtime 10.0.15, workstation GC and default tiered compilation. The
+consumer used an exact PackageReference for each version and verified the SHA-256
+of its library DLL against the archive. The downloaded package digests were:
+
+- 1.0.0 — `6f629bcf541052569334c3a45005697a29f955edf52c93a815ead2a37f555484`
+- 1.1.0 — `361b1776912eac8b98f102ed22b46add4ddb222989217f53eb12e03193654be3`
+
+Each cell gives the median and the observed minimum–maximum across nine fresh
+processes. Allocation figures are median managed bytes allocated on the calling
+thread per operation. The field reader and reference context first shipped in 1.1.0.
+
+| Operation and unit | 1.0.0 median (range) | 1.1.0 median (range) | Bytes/op 1.0.0 | Bytes/op 1.1.0 |
+| --- | ---: | ---: | ---: | ---: |
+| First `SpdxLicenseRegistry.Default` access, ms | 26.3 (24.4–29.1) | 37.5 (37.0–43.6) | 2,729,928 | 2,996,544 |
+| `Parse` + `Validate`, million fields/s | 1.164 (1.075–1.176) | 1.153 (1.110–1.184) | 966 | 966 |
+| `Read`, million fields/s | — | 2.154 (2.021–2.226) | — | 490 |
+| `Read` + `Validate`, million fields/s | — | 1.561 (1.390–1.645) | — | 913.6 |
+| `SpdxReferenceContext.Create`, µs/context | — | 13.92 (12.05–16.41) | — | 43,424 |
+| `Resolve`, µs/expression of four references | — | 0.315 (0.307–0.378) | — | 672 |
+
+The first-access timer covered the getter only and excluded process launch.
+First access cost about 11 ms more in 1.1.0 on this host. For the shared warm
+`Parse` + `Validate` workload, the ranges overlapped and allocations were equal.
+A second set of nine processes using the identical 1.1.0 binary gave medians of
+39.8 ms for first access and 1.177 million fields/s for the shared workload.
+The difference between the two warm release medians was smaller than the
+difference between the two measurements of the identical binary.
+
+**Field workload.** Each batch cycled through the following 20 non-null strings
+in order 5,000 times. Validation ran only for successful expressions and reused
+the loaded registry. Both entry points produced 14 expressions per cycle. The
+strict parser rejected the other six fields. The field reader classified three
+as invalid syntax and recognized the empty string and both sentinels.
+
+```json
+["MIT", "Apache-2.0", " ISC ", "BSD-3-Clause", "mit", "MIT OR Apache-2.0",
+ "(MIT OR ISC) AND MIT", "MIT WITH LLVM-exception", "GPL-2.0", "LicenseRef-X",
+ "DocumentRef-V:LicenseRef-X OR MIT", "LicenseRef-X OR LicenseRef-X",
+ "Unknown-1.0", "MIT AND Unknown-1.0", "", " NONE ", "NOASSERTION", "MIT OR",
+ "(MIT", "MIT\u00a0OR ISC"]
+```
+
+**Reference workload.** Each creation batch indexed the same prebuilt inputs
+2,000 times: 32 documents, 16 definitions per document and one alias per
+document bound to the next document. Each resolution batch reused one context
+and one pre-parsed expression, rotating the source document over 100,000 calls.
+Its four occurrences selected a local definition, a qualified definition, a
+missing local definition and an unknown alias.
+
+For warm measurements, each worker checked expected outcomes before warm-up,
+repeated complete batches for at least one second, then timed one batch with
+`Stopwatch`. Result counts were consumed inside the batch and checked afterward.
+Package versions and the same-binary control rotated through the serial run order.
+These local observations describe the listed workloads and machine. Their ranges
+measure variation between batches across processes, not individual field latency.
+
+### First access after the embedded reader change
+
+A second comparison on the same host measured the published 1.1.0 package and a
+locally packed Release build with the pinned embedded reader. Both carried version
+1.1.0. Each consumer restored an exact PackageReference from its own feed into an
+empty package cache. The consumer executable was byte-identical in both runs, and
+each loaded library matched the DLL in its archive. The local package SHA-256 was
+`e0d384ecc172a4b8d07bb0c9899aee17045aac355d8a610ba5a57b162409e9aa`.
+
+| Package | First access, median ms (min–max) | Median managed bytes on calling thread |
+| --- | ---: | ---: |
+| Published 1.1.0 | 38.38 (36.86–39.22) | 2,996,544 |
+| Local build with pinned reader | 23.03 (22.32–23.61) | 2,012,368 |
+
+Each of 12 rounds timed the first `Default` getter in a fresh process for each
+package, alternating which package ran first. Process launch and catalogue checks
+were outside the timer. The local build was faster in all 12 pairs, with a median
+paired saving of 14.99 ms (14.05–16.67 ms) and 984,176 fewer bytes allocated
+when comparing allocation medians. A separate check compared `Default` and both
+external `Load` overloads across packages. The catalogue identity, 740 licenses,
+86 exceptions and all 1,125 additional links matched, including entry and link order.
+
+### Plain formatting of a single license or reference
+
+On the same Windows x64 host, a Release consumer compared the prepared 1.1.1
+archive with a separate local 1.1.1 package containing the plain formatter change
+(SHA-256 `3589e8d22427f4946e9a78d9eea8f91ec94fecf982bf5af5dc87471b576bb259`).
+Each package was restored from its own feed and empty cache. Six paired rounds
+alternated package order, using the same consumer binary and a fresh process per
+package per round. Each case warmed up for at least 1.2 seconds. The table gives
+median batch times per call and managed bytes allocated on the calling thread.
+
+| Operation | Before, ns | After, ns | Before, B | After, B |
+| --- | ---: | ---: | ---: | ---: |
+| Format parsed `mit` | 100.4 | 3.1 | 352 | 0 |
+| Format parsed `LicenseRef-X` | 110.4 | 3.8 | 368 | 0 |
+| Format parsed `DocumentRef-D:LicenseRef-X` | 146.4 | 4.0 | 504 | 0 |
+| Parse then format `mit` | 156.5 | 62.7 | 608 | 256 |
+
+All four cases were faster in every pair. The shortest times include the benchmark
+loop and delegate call. A control expression with groups, boolean operators and
+`WITH` used the renderer in both packages and allocated 1,096 B per call in each.
 
 ## Documentation and runnable examples
 
@@ -193,7 +310,7 @@ fixtures and data available in the source checkout.
 
 ```powershell
 ./eng/test-release.ps1
-./eng/prepare-release.ps1 -Tag v1.1.0
+./eng/prepare-release.ps1 -Tag v1.1.1
 ```
 
 The standalone script tests stable/prerelease tags, malformed versions, package
@@ -239,6 +356,47 @@ Generated output paths in these instructions describe files created by a local r
 they are not links to files shipped in the repository.
 
 ## Release verification
+
+### 1.1.1
+
+Final local release preparation on Windows x64 passed with .NET SDK 10.0.404.
+All 869 NUnit tests passed in each of Debug and Release, with zero skips.
+All 20 example scenarios and all 20 independently compiled documentation snippets
+produced the expected output against the final 1.1.1 package. Its SHA-256 was
+`ab556c156de00121ed6daa8c0a187d41cc4b1ba6eab4fb6647e5db8762f42814`.
+Its library DLL matched the one used in the [plain formatter comparison](#plain-formatting-of-a-single-license-or-reference) byte for byte.
+
+The [first-access benchmark](#first-access-after-the-embedded-reader-change) in the
+release notes compared an earlier 1.1.1 archive (SHA-256
+`165816a0638dfa8138276e2a7f20ad660158edc8e30caee77856627c7ed6cfc8`)
+with the published 1.1.0 package on .NET 10.0.15.
+Each of 12 rounds used a fresh process per version and alternated the run order.
+The median time for the first `Default` getter fell from **38.13 ms to 22.67 ms**.
+The 1.1.1 package was faster in all 12 pairs, with a median paired saving of
+**15.05 ms** (12.96–16.08 ms). Median calling-thread allocation fell from
+2,996,544 to 2,012,368 bytes. Both packages returned the same catalogue identity,
+740 licenses, 86 exceptions and 1,125 links through `Default` and both external
+`Load` overloads.
+
+On the final archive, repeating the same comparisons gave a median cold `Default`
+time of 22.57 ms against 37.86 ms for published 1.1.0 (12/12 pairs faster).
+Plain `Format` allocated zero managed bytes for each of the three parsed
+single-license/reference inputs. Parsing and formatting `mit` together took
+47.5 ns against 113.0 ns for the earlier 1.1.1 package, with 256 versus 608
+managed bytes per call. All four formatter cases were faster in all six pairs.
+
+### 1.1.0
+
+The local Windows verification run used .NET SDK 10.0.404. All 866 NUnit tests
+passed in Debug and all 866 passed in Release, with zero failures or skips.
+Against the locally built NuGet package, all 20 example scenarios produced the
+documented output. All 20 documented programs also compiled and ran independently
+against that package and produced the expected output.
+
+The [v1.1.0 release workflow](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44910880991)
+passed for commit `7be85c3`.
+
+### 1.0.0
 
 The 1.0.0 API and package have passed the complete local verification pipeline
 on Windows with .NET SDK 10.0.404 and runtime 10.0.15:

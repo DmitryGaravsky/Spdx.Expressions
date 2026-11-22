@@ -55,7 +55,7 @@ From the checkout root, use PowerShell 7 to give each local build its own prerel
 version. NuGet can then distinguish it from earlier builds already in the package cache.
 
 ```powershell
-$localVersion = '1.1.0-local-' + [Guid]::NewGuid().ToString('N')
+$localVersion = '1.1.1-local-' + [Guid]::NewGuid().ToString('N')
 $output = Join-Path 'artifacts/verification' $localVersion
 ./eng/verify.ps1 -Version $localVersion -OutputDirectory $output
 $run = Get-Content (Join-Path $output 'run.json') -Raw | ConvertFrom-Json

@@ -23,9 +23,9 @@ Source string ──→ Parse ──→ immutable AST + source/spans
                       │                         └──→ all occurrences + independent flags
                       └──→ syntax/limit diagnostic, no partial AST
 
-Embedded JSON streams ─┐
-                       ├──→ bounded pair loader ──→ registry entries with names and links
-Selected bytes/streams ┘                              and exact-byte catalogue identity
+Embedded resources ──→ pinned length and SHA-256 ──→ JSON entries ──┐
+                                                                    ├──→ sorted entries and lookup indexes
+Selected bytes/streams ──→ bounded acquisition and schema checks ───┘
 ```
 
 | Location | Responsibility |
@@ -46,18 +46,21 @@ Public types always use Spdx.Expressions; folder names do not change the API nam
 Internal shared helpers use Spdx.Expressions.Internal. AST constructors are non-public.
 Collections do not expose mutable storage. Options are immutable and operations have
 no shared mutable request state. The embedded registry is a lazy, thread-safe immutable
-snapshot. Embedded resources and external memory and stream inputs share document parsing,
-display metadata extraction and pair checks. The embedded snapshot also verifies its pinned identity.
-Each load owns its byte snapshots and budgets, then constructs an independent immutable
-registry. Parse, ordinary Format and AST traversal work independently of the catalogue.
+snapshot. On first access, the embedded reader verifies each resource against its pinned
+length and SHA-256 before reading its version and entries with `JsonDocument`.
+Each external load owns its byte snapshots, validates the pair under the caller's budgets
+and computes its identity. Both paths use the same immutable entry types and registry
+constructor. Parse, ordinary Format and AST traversal work independently of the catalogue.
 Validation and opt-in canonical casing each use their explicitly supplied registry.
 
 Parser recursion is bounded by explicit group depth; operator chains are flat lists.
 Enumeration projects entry frames from the explicit stack shared with validation and
 formatting. The walker dispatches the same nodes to typed callbacks. Diagnostic storage
-never limits occurrence collection or changes error/reference flags. The shared renderer
-copies source slices for ordinary Format and looks up the expected namespace for
-eligible IDs in FormatCanonicalCasing. Both paths preserve the original AST.
+never limits occurrence collection or changes error/reference flags. Ordinary Format
+can reuse the source string when a single license or reference spans the entire input.
+For other inputs it uses the shared renderer to copy source slices and format
+operator spacing. FormatCanonicalCasing uses the renderer for every input and looks
+up eligible IDs in the expected namespace. Both formatters preserve the original AST.
 
 The [API guide](api.md), [syntax reference](syntax.md) and [catalogue guide](catalogue.md)
 specify spans, results, lexical policies, limits and dataset identity. Keep those contracts

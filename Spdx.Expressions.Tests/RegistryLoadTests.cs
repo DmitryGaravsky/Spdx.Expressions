@@ -98,6 +98,8 @@ namespace Spdx.Expressions.Tests {
             var registry = loaded.Registry!;
             var embedded = SpdxLicenseRegistry.Default;
             Assert.That(registry, Is.Not.SameAs(embedded));
+            Assert.That(registry.Licenses, Is.EqualTo(embedded.Licenses).UsingPropertiesComparer());
+            Assert.That(registry.Exceptions, Is.EqualTo(embedded.Exceptions).UsingPropertiesComparer());
             Assert.That(RegistryLoadVectors.LoadPair(licenses, exceptions, options: null, useStreams).Registry, Is.Not.SameAs(registry));
             Assert.That((registry.Identity.LicenseListVersion, registry.Identity.LicensesSha256, registry.Identity.ExceptionsSha256),
                 Is.EqualTo(("3.29.0", "47d1cc681abe31166b342b6cc4aab13a6ba8ea5c48794697fe3bf8b1dbaf509a",
