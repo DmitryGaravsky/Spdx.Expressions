@@ -5,6 +5,9 @@
     <RootNamespace>Spdx.Expressions</RootNamespace>
     <IsPackable>true</IsPackable>
     <Description>Offline SPDX 2.3.1 expression parsing, validation and source-preserving formatting.</Description>
+    <PackageReleaseNotes>First access to SpdxLicenseRegistry.Default on Windows x64 (.NET 10.0.15) fell from a median of 38.13 ms in 1.1.0 to 22.67 ms in 1.1.1, saving 984,176 managed bytes per initialization. The pinned SPDX 3.29.0 catalogue and external Load behavior are unchanged.
+
+Plain Format can reuse the source string for a single license or reference with no outer whitespace. In six paired rounds before and after this change, median Format time for parsed mit fell from 100.4 to 3.1 ns, LicenseRef-X from 110.4 to 3.8 ns, and DocumentRef-D:LicenseRef-X from 146.4 to 4.0 ns. Each formatted with zero managed bytes allocated on the calling thread. Parsing and formatting mit together fell from 156.5 to 62.7 ns and from 608 to 256 bytes per call.</PackageReleaseNotes>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>

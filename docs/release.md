@@ -10,7 +10,7 @@ distributing the package. The real package check verifies the generated README c
 The package does not contain the repository guides or runnable example sources.
 The implementation's MIT declaration does not replace the dataset's attribution.
 
-Only the library is packable. The source version is 1.1.0. The SDK version and
+Only the library is packable. The source version is 1.1.1. The SDK version and
 roll-forward policy are declared in global.json; changing either requires renewed
 verification. CI installs the declared SDK.
 
@@ -19,8 +19,8 @@ verification. CI installs the declared SDK.
 ```powershell
 ./eng/verify.ps1
 ./eng/test-release.ps1
-./eng/prepare-release.ps1 -Tag v1.1.0
-./eng/verify-release-assets.ps1 -Version 1.1.0 -Directory ./artifacts/release/1.1.0
+./eng/prepare-release.ps1 -Tag v1.1.1
+./eng/verify-release-assets.ps1 -Version 1.1.1 -Directory ./artifacts/release/1.1.1
 ```
 
 Verification includes offline release-script tests with synthetic packages and substituted
@@ -68,7 +68,7 @@ unchecked for a stable version. Classification mismatches stop publication.
 1. Commit and push the reviewed changes to main and check the build CI results. The
    selected commit must contain this release workflow; existing old tags retain their
    old workflow. Do not move or reuse a published version tag.
-2. Open **Releases → Draft a new release**. Create a new tag such as v1.1.0 targeting
+2. Open **Releases → Draft a new release**. Create a new tag such as v1.1.1 targeting
    main, or select an existing version tag whose commit belongs to main.
 3. Enter the release title and description. Select **This is a pre-release** only for
    a prerelease version. Leave the asset list empty; the workflow supplies both files.
