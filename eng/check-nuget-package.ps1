@@ -1,16 +1,17 @@
 #Requires -Version 7.0
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$Version, [Parameter(Mandatory)][string]$Directory,
-    [Parameter(Mandatory)][string]$Commit)
+    [Parameter(Mandatory)][string]$Commit,
+    [ValidateSet('Spdx.Expressions', 'Spdx.Compliance', IgnoreCase = $false)][string]$PackageId = 'Spdx.Expressions')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Version = & "$PSScriptRoot/get-version.ps1" -Version $Version
-& "$PSScriptRoot/verify-release-assets.ps1" -Version $Version -Directory $Directory -Commit $Commit
-$name = "Spdx.Expressions.$Version.nupkg"
+& "$PSScriptRoot/verify-release-assets.ps1" -PackageId $PackageId -Version $Version -Directory $Directory -Commit $Commit
+$name = "$PackageId.$Version.nupkg"
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('spdx-nuget-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temporary) | Out-Null
 $download = Join-Path $temporary $name
-$url = "https://api.nuget.org/v3-flatcontainer/spdx.expressions/$Version/$($name.ToLowerInvariant())"
+$url = "https://api.nuget.org/v3-flatcontainer/$($PackageId.ToLowerInvariant())/$Version/$($name.ToLowerInvariant())"
 try {
     Invoke-WebRequest -Uri $url -OutFile $download -TimeoutSec 60 | Out-Null
 }

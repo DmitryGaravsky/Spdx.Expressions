@@ -5,8 +5,8 @@ param([Parameter(Mandatory)][string]$Tag, [Parameter(Mandatory)][string]$Commit,
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
-$version = & "$PSScriptRoot/get-version.ps1" -Tag $Tag
-& "$PSScriptRoot/verify-release-assets.ps1" -Version $version -Directory $Directory -Commit $Commit
+$target = & "$PSScriptRoot/get-release-target.ps1" -Tag $Tag
+& "$PSScriptRoot/verify-release-assets.ps1" -PackageId $target.PackageId -Version $target.Version -Directory $Directory -Commit $Commit
 function Invoke-Gh([string[]]$Arguments) {
     & gh @Arguments --repo DmitryGaravsky/Spdx.Expressions
     if ($LASTEXITCODE -ne 0) {

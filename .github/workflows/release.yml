@@ -25,9 +25,15 @@ env:
 jobs:
   version:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      package_id: ${{ steps.version.outputs.package_id }}
+      release_directory: ${{ steps.version.outputs.release_directory }}
+      reused: ${{ steps.candidate.outputs.reused }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -41,11 +47,50 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
           ./eng/verify-release-source.ps1 -Tag $env:RELEASE_TAG -Commit $env:RELEASE_COMMIT | Out-Null
-          $version = ./eng/get-version.ps1 -Tag $env:RELEASE_TAG
-          "version=$version" >> $env:GITHUB_OUTPUT
+          $target = ./eng/get-release-target.ps1 -Tag $env:RELEASE_TAG
+          "version=$($target.Version)" >> $env:GITHUB_OUTPUT
+          "package_id=$($target.PackageId)" >> $env:GITHUB_OUTPUT
+          "release_directory=$($target.Directory)" >> $env:GITHUB_OUTPUT
+      - name: Look for a verified Linux package from main CI
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_DIR: ${{ steps.version.outputs.release_directory }}
+        run: |
+          $reused = ./eng/reuse-ci-package.ps1 -Tag $env:RELEASE_TAG -Commit $env:RELEASE_COMMIT -OutputDirectory $env:RELEASE_DIR
+          "reused=$($reused.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          exit 0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        if: steps.candidate.outputs.reused == 'true' && steps.version.outputs.package_id == 'Spdx.Compliance'
+        with:
+          global-json-file: global.json
+      - name: Verify reused Compliance package with public dependencies
+        if: steps.candidate.outputs.reused == 'true' && steps.version.outputs.package_id == 'Spdx.Compliance'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_DIR: ${{ steps.version.outputs.release_directory }}
+        run: |
+          ./eng/compliance-package-smoke.ps1 -Package "$env:RELEASE_DIR/Spdx.Compliance.$env:RELEASE_VERSION.nupkg" -Version $env:RELEASE_VERSION -DependencySource https://api.nuget.org/v3/index.json -OutputDirectory artifacts/compliance-release-smoke
+      - name: Retain Compliance consumer results
+        if: always() && steps.candidate.outputs.reused == 'true' && steps.version.outputs.package_id == 'Spdx.Compliance'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-compliance-smoke-${{ github.run_attempt }}
+          path: artifacts/compliance-release-smoke/
+      - name: Preserve verified CI package for publication
+        if: steps.candidate.outputs.reused == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          path: ${{ steps.version.outputs.release_directory }}/*
+          if-no-files-found: error
+          retention-days: 30
 
   verify:
     needs: version
+    if: needs.version.outputs.reused == 'false'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -63,7 +108,7 @@ jobs:
       - name: Verify and prepare the release package
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: ./eng/prepare-release.ps1 -Tag $env:RELEASE_TAG
+        run: ./eng/prepare-release.ps1 -Tag $env:RELEASE_TAG -DependencySource https://api.nuget.org/v3/index.json
       - name: Upload verification results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -78,18 +123,23 @@ jobs:
             artifacts/verification/*/documentation-tests/result.json
             artifacts/verification/*/release-tests/result.json
             artifacts/verification/*/package-smoke/**
+            artifacts/verification/*/compliance-smoke/**
           if-no-files-found: warn
       - name: Preserve verified release files
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-${{ needs.version.outputs.version }}
-          path: artifacts/release/${{ needs.version.outputs.version }}/*
+          path: ${{ needs.version.outputs.release_directory }}/*
           if-no-files-found: error
           retention-days: 30
 
   nuget:
     needs: [version, verify]
+    if: >-
+      ${{ !cancelled() && needs.version.result == 'success' &&
+          ((needs.version.outputs.reused == 'true' && needs.verify.result == 'skipped') ||
+           (needs.version.outputs.reused == 'false' && needs.verify.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: nuget
@@ -115,13 +165,14 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_COMMIT: ${{ github.sha }}
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          PACKAGE_ID: ${{ needs.version.outputs.package_id }}
           NUGET_USER: ${{ vars.NUGET_USER }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:NUGET_USER)) {
             throw 'Set NUGET_USER in the nuget environment.'
           }
           ./eng/publish-github-release.ps1 -Tag $env:RELEASE_TAG -Commit $env:RELEASE_COMMIT -Directory artifacts/publish -CheckOnly
-          $exists = ./eng/check-nuget-package.ps1 -Version $env:RELEASE_VERSION -Commit $env:RELEASE_COMMIT -Directory artifacts/publish
+          $exists = ./eng/check-nuget-package.ps1 -PackageId $env:PACKAGE_ID -Version $env:RELEASE_VERSION -Commit $env:RELEASE_COMMIT -Directory artifacts/publish
           "exists=$($exists.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
       - name: Authenticate to NuGet.org
         if: steps.publication.outputs.exists == 'false'
@@ -137,15 +188,17 @@ jobs:
           RELEASE_COMMIT: ${{ github.sha }}
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          PACKAGE_ID: ${{ needs.version.outputs.package_id }}
         run: |
           ./eng/verify-release-source.ps1 -Tag $env:RELEASE_TAG -Commit $env:RELEASE_COMMIT | Out-Null
-          dotnet nuget push "artifacts/publish/Spdx.Expressions.$env:RELEASE_VERSION.nupkg" --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json
+          dotnet nuget push "artifacts/publish/$env:PACKAGE_ID.$env:RELEASE_VERSION.nupkg" --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json
           if ($LASTEXITCODE -ne 0) {
-            throw 'NuGet publication failed for Spdx.Expressions.'
+            throw "NuGet publication failed for $env:PACKAGE_ID."
           }
 
   github-release:
     needs: [version, nuget]
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.nuget.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

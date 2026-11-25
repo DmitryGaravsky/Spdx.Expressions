@@ -4,7 +4,8 @@ param([Parameter(Mandatory)][string]$Tag, [Parameter(Mandatory)][string]$Commit)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
-$version = & "$PSScriptRoot/get-version.ps1" -Tag $Tag
+$target = & "$PSScriptRoot/get-release-target.ps1" -Tag $Tag
+$version = $target.Version
 if ($Commit -cnotmatch '\A[0-9a-f]{40}\z') {
     throw 'Expected the full commit SHA from the release event.'
 }
@@ -30,7 +31,7 @@ if ($release.tag_name -cne $Tag -or $release.draft -or $release.prerelease -ne $
 }
 if ($release.immutable) {
     $names = @($release.assets | ForEach-Object { $_.name })
-    if ("Spdx.Expressions.$version.nupkg" -cnotin $names -or 'SHA256SUMS' -cnotin $names) {
+    if ("$($target.PackageId).$version.nupkg" -cnotin $names -or 'SHA256SUMS' -cnotin $names) {
         throw 'An immutable release cannot receive missing files. Disable immutable releases before creating a new UI release.'
     }
 }

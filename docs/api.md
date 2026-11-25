@@ -2,7 +2,9 @@
 
 [Overview](../README.md) · [Usage](usage.md) · [Syntax](syntax.md) · [Catalogue](catalogue.md)
 
-All public types use the `Spdx.Expressions` namespace. XML member documentation ships
+This guide covers the `Spdx.Expressions` namespace. The separate
+[Spdx.Compliance API](compliance.md#operations) evaluates component license policy.
+XML member documentation ships
 with the assembly for IDE completion. Parse, ordinary Format and AST traversal work
 without a registry. Validation and canonical casing each take an explicit registry.
 These operations accept optional cancellation tokens.

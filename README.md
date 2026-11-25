@@ -1,7 +1,8 @@
 # Spdx.Expressions
 
 [![Build and test](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/Spdx.Expressions)](https://www.nuget.org/packages/Spdx.Expressions/)
+[![Spdx.Expressions on NuGet](https://img.shields.io/nuget/v/Spdx.Expressions?label=Spdx.Expressions)](https://www.nuget.org/packages/Spdx.Expressions/)
+[![Spdx.Compliance on NuGet](https://img.shields.io/nuget/v/Spdx.Compliance?label=Spdx.Compliance)](https://www.nuget.org/packages/Spdx.Compliance/)
 [![License](https://img.shields.io/github/license/DmitryGaravsky/Spdx.Expressions)](LICENSE)
 [![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](Spdx.Expressions/Spdx.Expressions.csproj)
 [![SPDX License List 3.29.0](https://img.shields.io/badge/SPDX%20License%20List-3.29.0-blue)](docs/catalogue.md)
@@ -19,6 +20,9 @@ catalogue. The library has no runtime NuGet dependencies or runtime network requ
 The library targets **net10.0 only**. The syntax profile is SPDX-2.3.1 and the
 embedded catalogue is v3.29.0. These versions are independent of the package version.
 Source: [DmitryGaravsky/Spdx.Expressions](https://github.com/DmitryGaravsky/Spdx.Expressions).
+
+For component-level distribution policy and CycloneDX 1.6 analysis, see the separate
+[Spdx.Compliance package](docs/compliance.md).
 
 ## When to use it
 
@@ -164,6 +168,8 @@ for syntax errors and truncated validation diagnostics.
 | --- | --- |
 | [Usage and examples](docs/usage.md) | NuGet and local setup, runnable scenarios and expected output |
 | [API guide](docs/api.md) | Operations, result flags, AST and source evidence |
+| [Component license policy](docs/compliance.md) | Install Spdx.Compliance, evaluate declarations and analyze CycloneDX components |
+| [Decision semantics](docs/compliance-decisions.md) | AND and OR outcomes, current actions and conditions on alternative branches |
 | [Syntax reference](docs/syntax.md) | Grammar policies, diagnostic codes, limits and cancellation |
 | [Catalogues](docs/catalogue.md) | Embedded snapshot, caller-selected schema, lookup and dataset identity |
 | [Compatibility](docs/compatibility.md) | Stable 1.x contracts, additive changes and catalogue update policy |

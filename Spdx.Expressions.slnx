@@ -2,4 +2,7 @@
   <Project Path="Spdx.Expressions/Spdx.Expressions.csproj" />
   <Project Path="Spdx.Expressions.Tests/Spdx.Expressions.Tests.csproj" />
   <Project Path="Spdx.Expressions.Examples/Spdx.Expressions.Examples.csproj" />
+  <Project Path="Spdx.Compliance/Spdx.Compliance.csproj" />
+  <Project Path="Spdx.Compliance.Tests/Spdx.Compliance.Tests.csproj" />
+  <Project Path="Spdx.Compliance.Examples/Spdx.Compliance.Examples.csproj" />
 </Solution>

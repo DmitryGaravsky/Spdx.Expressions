@@ -11,7 +11,7 @@ an explicit local development feed for offline environments with the pinned depe
 Documentation checks and offline release-script tests run first. Restore and test builds
 use one MSBuild node. Debug and Release tests run under external process-tree watchdogs.
 Whitespace must already match .editorconfig; verification reports changes rather than applying them.
-The final Release nupkg is tested through a PackageReference consumer outside the solution
+The Spdx.Expressions Release nupkg is tested through a PackageReference consumer outside the solution
 with isolated package/HTTP/CLI caches and a local-only feed. SDK first-run PATH updates
 are explicitly disabled; a successful consumer check also requires unchanged user and
 machine PATH raw registry values, value existence and registry value kinds on Windows.
@@ -21,9 +21,15 @@ cancellation, and compiles both documented traversal examples against the packag
 Each invocation retains its package, logs and run.json under a unique
 `artifacts/verification/<run-id>` directory, including failed runs. The mutable
 `artifacts/latest-verification.json` pointer identifies the latest run and its status.
-Optional Version applies one validated version to restore, builds and packing; the
-isolated consumer compares package and loaded assembly versions. OutputDirectory can
+Optional Version overrides the selected package version. The isolated consumers
+compare package and loaded assembly versions. OutputDirectory can
 select a new evidence directory; an existing directory is rejected.
+
+The default pipeline also runs the Spdx.Compliance NUnit suite in Debug and Release,
+packs Compliance at its own version, and builds and executes the [example](compliance.md)
+in a fresh PackageReference consumer. Development verification uses the paired Expressions
+package. A Compliance release resolves Expressions and NuGet.Versioning from the configured
+dependency source. The smoke test records the candidate and loaded assembly hashes.
 
 ## Focused checks
 
@@ -311,6 +317,7 @@ fixtures and data available in the source checkout.
 ```powershell
 ./eng/test-release.ps1
 ./eng/prepare-release.ps1 -Tag v1.1.1
+./eng/prepare-release.ps1 -Tag compliance-v0.1.0
 ```
 
 The standalone script tests stable/prerelease tags, malformed versions, package
@@ -357,14 +364,26 @@ they are not links to files shipped in the repository.
 
 ## Release verification
 
+### Spdx.Compliance 0.1.0
+
+On 25 November 2026 the Windows verification run passed 188 Compliance and 869
+Expressions tests in each of Debug and Release, plus 58 release-script cases.
+The local release rehearsal installed the stable Compliance nupkg in a clean consumer
+with Spdx.Expressions 1.1.1 and NuGet.Versioning 7.9.0 from NuGet.org.
+The same consumer also passed with the package selected from local CI-format artifacts.
+The [versioned release](https://github.com/DmitryGaravsky/Spdx.Expressions/releases/tag/compliance-v0.1.0)
+provides the distribution archive and its SHA256SUMS.
+
 ### 1.1.1
 
 Final local release preparation on Windows x64 passed with .NET SDK 10.0.404.
 All 869 NUnit tests passed in each of Debug and Release, with zero skips.
 All 20 example scenarios and all 20 independently compiled documentation snippets
-produced the expected output against the final 1.1.1 package. Its SHA-256 was
+produced the expected output against the local 1.1.1 rehearsal package. Its SHA-256 was
 `ab556c156de00121ed6daa8c0a187d41cc4b1ba6eab4fb6647e5db8762f42814`.
 Its library DLL matched the one used in the [plain formatter comparison](#plain-formatting-of-a-single-license-or-reference) byte for byte.
+The distributed Linux archive and its SHA256SUMS are attached to the
+[v1.1.1 release](https://github.com/DmitryGaravsky/Spdx.Expressions/releases/tag/v1.1.1).
 
 The [first-access benchmark](#first-access-after-the-embedded-reader-change) in the
 release notes compared an earlier 1.1.1 archive (SHA-256
@@ -413,9 +432,9 @@ on Windows with .NET SDK 10.0.404 and runtime 10.0.15:
 
 The merged implementation passed the
 [Ubuntu, Windows and macOS main CI run](https://github.com/DmitryGaravsky/Spdx.Expressions/actions/runs/44354643541).
-Each tagged release independently runs the complete three-platform verification
-before publishing its retained artifact. Use that release's workflow result and
-checksums to identify the distributed package.
+Each tagged release requires successful three-platform verification, either from
+the matching main CI run or from the release build. Use the release workflow result
+and its SHA256SUMS to identify the distributed archive.
 
 These checks support the [1.x compatibility contract](compatibility.md). Bounded
 robustness and differential checks do not constitute exhaustive conformance,
