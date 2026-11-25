@@ -7,10 +7,7 @@ if ($PSBoundParameters.ContainsKey('Version') -and $PSBoundParameters.ContainsKe
     throw 'Specify Version or Tag, not both.'
 }
 if ($PSBoundParameters.ContainsKey('Tag')) {
-    if ([string]::IsNullOrWhiteSpace($Tag) -or -not $Tag.StartsWith('v', [StringComparison]::Ordinal)) {
-        throw 'Release tags must start with v.'
-    }
-    $Version = $Tag.Substring(1)
+    return (& "$PSScriptRoot/get-release-target.ps1" -Tag $Tag).Version
 }
 elseif (-not $PSBoundParameters.ContainsKey('Version')) {
     [xml]$properties = Get-Content -LiteralPath "$PSScriptRoot/../Directory.Build.props" -Raw

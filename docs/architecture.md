@@ -40,9 +40,13 @@ Selected bytes/streams ──→ bounded acquisition and schema checks ───
 | Spdx.Expressions/Data | Exact upstream source bytes, provenance and notices |
 | Spdx.Expressions.Tests | Independent NUnit fixtures |
 | Spdx.Expressions.Examples | Runnable public-API scenarios with documented output |
+| Spdx.Compliance | Distribution policy, decision trees, action summaries and CycloneDX 1.6 analysis |
+| Spdx.Compliance.Tests | Policy, decision, evidence and per-occurrence regression tests |
+| Spdx.Compliance.Examples | Runnable policy and CycloneDX example used by the isolated package consumer |
 | eng | Verification driver, process watchdog and external package consumer |
 
-Public types always use Spdx.Expressions; folder names do not change the API namespace.
+Expression types use the `Spdx.Expressions` namespace. Policy and component APIs
+belong to the separate Spdx.Compliance assembly.
 Internal shared helpers use Spdx.Expressions.Internal. AST constructors are non-public.
 Collections do not expose mutable storage. Options are immutable and operations have
 no shared mutable request state. The embedded registry is a lazy, thread-safe immutable
@@ -82,3 +86,24 @@ to match the repository commit stored in the nuspec. Fenced code is preserved ve
 request is needed by the pack target. These links require the referenced source revision to
 be published before distribution; local checks verify paths and transformation, not remote
 availability. The generated file is kept under obj and is not an embedded resource.
+
+## Compliance package
+
+The [Spdx.Compliance library](compliance.md) is a separate package. It uses the public
+Spdx.Expressions APIs and keeps policy, CycloneDX and correction models out of the
+parser assembly.
+
+```text
+CycloneDX 1.6 JSON ──→ component occurrences ──→ component license decisions
+                               │                            ↑
+                               └──→ correction check       │
+                                     ↑                      │
+External policy + pinned catalog ────┴──→ policy snapshot ──┘
+
+Spdx.Compliance ──→ Spdx.Expressions (field reader, catalogue, reference context)
+                 └→ NuGet.Versioning (package versions and selectors)
+```
+
+The same distribution rules evaluate single expressions and component declarations.
+Correction verification runs against the original component data and travels beside
+the policy decision in a component report.

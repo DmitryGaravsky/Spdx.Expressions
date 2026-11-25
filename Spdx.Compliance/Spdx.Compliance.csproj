@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="Version">
+  <PropertyGroup>
+    <ComplianceVersion Condition="'$(ComplianceVersion)' == ''">0.1.0</ComplianceVersion>
+    <Version>$(ComplianceVersion)</Version>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Offline component-level license policy evaluation for SPDX expressions and CycloneDX 1.6 JSON.</Description>
+    <PackageTags>spdx;license;policy;cyclonedx;sbom</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Spdx.Expressions/Spdx.Expressions.csproj" />
+    <PackageReference Include="NuGet.Versioning" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

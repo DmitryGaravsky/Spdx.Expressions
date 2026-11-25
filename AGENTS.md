@@ -18,6 +18,10 @@ Work directly in this repository for authorized tasks. Integration, external con
 external document acquisition, serialization, automatic updates and
 publication require their own tasks. External consumer testing is independent of this project.
 
+Spdx.Compliance is the separate .NET 10 package for evaluating license declarations
+and CycloneDX components under a caller-supplied policy. Keep policy decisions and
+SBOM input in that package. Each library has its own version and release tag.
+
 ## Git ownership
 
 Agents may use read-only Git operations: status, diff, log, show, blame and ls-files.
@@ -42,6 +46,7 @@ verification outputs remain ignored; preserve historical evidence.
 | Package overview and getting started | [README](README.md) |
 | Runnable examples and local package setup | [Usage](docs/usage.md) |
 | Operations, models and result contracts | [API](docs/api.md) |
+| Component policy, evidence and OR actions | [Compliance](docs/compliance.md) and [decision semantics](docs/compliance-decisions.md) |
 | Syntax, diagnostics and limits | [Syntax](docs/syntax.md) |
 | Catalogue loading, embedded data and identity | [Catalogue](docs/catalogue.md) |
 | Source organization and invariants | [Architecture](docs/architecture.md) |
@@ -56,7 +61,7 @@ configured workflows do not prove that features work or hosted checks have passe
 
 ## Architecture and API
 
-- Keep the solution, library and test project at repository root; no src/tests wrappers.
+- Keep both libraries, their tests and examples at the solution root.
   Shared test settings belong in eng/Tests.props; package versions in Directory.Packages.props.
 - Target net10.0 only. Keep stable SDK selection explicit in global.json; version and roll-forward policy changes require renewed verification.
 - Group sources by responsibility: Parsing (parser/options/AST/results), Registry (embedded
@@ -137,6 +142,9 @@ configured workflows do not prove that features work or hosted checks have passe
   boundary and negative checks; packaging/API changes require actual isolated nupkg consumers.
 - Run bounded robustness with external process timeouts. Report failed/interrupted/unavailable
   checks accurately, preserve evidence and never count an unavailable platform as passed.
+- Finalize both package READMEs, versioned installation examples and current working
+  statuses in the release PR. Use the registry and tagged release for distribution status
+  and checksums. Date local and historical evidence so publication requires no wording changes.
 - Keep docs in English and use relative links. Product docs describe implemented functionality;
   contributor docs describe procedures. Use UTF text diagrams, never Mermaid.
 - MIT covers this implementation under Dmitry Garavsky's authorship. Upstream data notices are

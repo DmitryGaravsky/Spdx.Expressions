@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           global-json-file: global.json
-      - name: Restore, test, format and verify the real package
+      - name: Restore, test, format and verify both NuGet packages
         run: ./eng/verify.ps1
       - name: Upload test results and verification logs
         if: always()
@@ -55,8 +55,9 @@ jobs:
             artifacts/verification/*/documentation-tests/result.json
             artifacts/verification/*/release-tests/result.json
             artifacts/verification/*/package-smoke/**
+            artifacts/verification/*/compliance-smoke/**
           if-no-files-found: warn
-      - name: Upload verified local development package
+      - name: Upload verified development packages
         if: success() && runner.os == 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

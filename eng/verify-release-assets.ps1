@@ -1,11 +1,12 @@
 #Requires -Version 7.0
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Version, [Parameter(Mandatory)][string]$Directory, [string]$Commit)
+param([Parameter(Mandatory)][string]$Version, [Parameter(Mandatory)][string]$Directory, [string]$Commit,
+    [ValidateSet('Spdx.Expressions', 'Spdx.Compliance', IgnoreCase = $false)][string]$PackageId = 'Spdx.Expressions')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Version = & "$PSScriptRoot/get-version.ps1" -Version $Version
 $Directory = (Resolve-Path -LiteralPath $Directory).ProviderPath
-$name = "Spdx.Expressions.$Version.nupkg"
+$name = "$PackageId.$Version.nupkg"
 $expected = @($name, 'SHA256SUMS')
 $files = @(Get-ChildItem -LiteralPath $Directory -Force)
 $unexpected = @($files | Where-Object {
@@ -22,15 +23,15 @@ if ($lines.Count -ne 1 -or $lines[0] -cne "$hash  $name") {
 $archive = [IO.Compression.ZipFile]::OpenRead((Join-Path $Directory $name))
 try {
     $specifications = @($archive.Entries | Where-Object { $_.FullName.EndsWith('.nuspec', [StringComparison]::Ordinal) })
-    if ($specifications.Count -ne 1 -or $specifications[0].FullName -cne 'Spdx.Expressions.nuspec') {
-        throw 'Expected exactly one Spdx.Expressions package specification.'
+    if ($specifications.Count -ne 1 -or $specifications[0].FullName -cne "$PackageId.nuspec") {
+        throw "Expected exactly one $PackageId package specification."
     }
     $stream = $specifications[0].Open()
     try { $spec = [Xml.Linq.XDocument]::Load($stream) }
     finally { $stream.Dispose() }
     $ns = $spec.Root.Name.Namespace
     $metadata = $spec.Root.Element($ns + 'metadata')
-    if ($metadata.Element($ns + 'id').Value -cne 'Spdx.Expressions' -or
+    if ($metadata.Element($ns + 'id').Value -cne $PackageId -or
         $metadata.Element($ns + 'version').Value -cne $Version) {
         throw 'Package identity does not match the release version.'
     }
@@ -47,9 +48,12 @@ try {
         $metadata.Element($ns + 'authors').Value -cne 'Dmitry Garavsky') {
         throw 'Package repository, license or author metadata is incorrect.'
     }
-    foreach ($entry in @('lib/net10.0/Spdx.Expressions.dll', 'lib/net10.0/Spdx.Expressions.xml',
-        'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'data/manifest.json',
-        'data/licenses.json', 'data/exceptions.json', 'data/UPSTREAM-README.md', 'data/UPSTREAM-XML-README.md')) {
+    $required = @("lib/net10.0/$PackageId.dll", "lib/net10.0/$PackageId.xml", 'README.md', 'LICENSE')
+    if ($PackageId -ceq 'Spdx.Expressions') {
+        $required += @('THIRD-PARTY-NOTICES.md', 'data/manifest.json', 'data/licenses.json',
+            'data/exceptions.json', 'data/UPSTREAM-README.md', 'data/UPSTREAM-XML-README.md')
+    }
+    foreach ($entry in $required) {
         if ($null -eq $archive.GetEntry($entry)) {
             throw "Missing release package entry: $entry"
         }

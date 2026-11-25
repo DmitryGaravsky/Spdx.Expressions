@@ -35,26 +35,26 @@ function Reject([scriptblock]$Action, [string]$MessagePattern) {
     }
     Assert $rejected 'Expected rejection did not occur.'
 }
-function Update-Checksum([string]$Directory, [string]$Version = '1.2.3-preview.1') {
-    $name = "Spdx.Expressions.$Version.nupkg"
+function Update-Checksum([string]$Directory, [string]$Version = '1.2.3-preview.1', [string]$PackageId = 'Spdx.Expressions') {
+    $name = "$PackageId.$Version.nupkg"
     $hash = (Get-FileHash -LiteralPath (Join-Path $Directory $name)).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText((Join-Path $Directory 'SHA256SUMS'), "$hash  $name" + [char]10)
 }
 function New-Fixture([string]$Name, [string]$Version = '1.2.3-preview.1',
     [string]$MetadataVersion = '', [string]$RepositoryUrl = 'https://github.com/DmitryGaravsky/Spdx.Expressions',
-    [string]$OmitEntry = '', [string]$MetadataCommit = $commit) {
+    [string]$OmitEntry = '', [string]$MetadataCommit = $commit, [string]$PackageId = 'Spdx.Expressions') {
     $directory = Join-Path $suite $Name
     [IO.Directory]::CreateDirectory($directory) | Out-Null
     if (-not $MetadataVersion) {
         $MetadataVersion = $Version
     }
-    $archive = [IO.Compression.ZipFile]::Open((Join-Path $directory "Spdx.Expressions.$Version.nupkg"), 'Create')
+    $archive = [IO.Compression.ZipFile]::Open((Join-Path $directory "$PackageId.$Version.nupkg"), 'Create')
     try {
-        $writer = [IO.StreamWriter]::new($archive.CreateEntry('Spdx.Expressions.nuspec').Open())
+        $writer = [IO.StreamWriter]::new($archive.CreateEntry("$PackageId.nuspec").Open())
         try {
             $writer.Write(@"
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"><metadata>
-<id>Spdx.Expressions</id><version>$MetadataVersion</version><authors>Dmitry Garavsky</authors>
+<id>$PackageId</id><version>$MetadataVersion</version><authors>Dmitry Garavsky</authors>
 <license type="expression">MIT</license>
 <projectUrl>https://github.com/DmitryGaravsky/Spdx.Expressions</projectUrl>
 <repository type="git" url="$RepositoryUrl" commit="$MetadataCommit" />
@@ -63,9 +63,12 @@ function New-Fixture([string]$Name, [string]$Version = '1.2.3-preview.1',
         }
         finally { $writer.Dispose() }
         # Synthetic payloads test publication boundaries, not library behavior.
-        foreach ($entry in @('lib/net10.0/Spdx.Expressions.dll', 'lib/net10.0/Spdx.Expressions.xml',
-            'README.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'data/manifest.json',
-            'data/licenses.json', 'data/exceptions.json', 'data/UPSTREAM-README.md', 'data/UPSTREAM-XML-README.md')) {
+        $entries = @("lib/net10.0/$PackageId.dll", "lib/net10.0/$PackageId.xml", 'README.md', 'LICENSE')
+        if ($PackageId -ceq 'Spdx.Expressions') {
+            $entries += @('THIRD-PARTY-NOTICES.md', 'data/manifest.json', 'data/licenses.json', 'data/exceptions.json',
+                'data/UPSTREAM-README.md', 'data/UPSTREAM-XML-README.md')
+        }
+        foreach ($entry in $entries) {
             if ($entry -ceq $OmitEntry) {
                 continue
             }
@@ -75,7 +78,7 @@ function New-Fixture([string]$Name, [string]$Version = '1.2.3-preview.1',
         }
     }
     finally { $archive.Dispose() }
-    Update-Checksum $directory $Version
+    Update-Checksum $directory $Version $PackageId
     return $directory
 }
 function Copy-Fixture([string]$Name) {
@@ -109,7 +112,7 @@ function Reset-Mock {
         TagExists = $true; TagCommit = $commit; MainStatus = 'ahead'; MergeBase = $commit
         MoveTagOnUpload = $false; MoveTagOnDownload = $false; ReplaceOnRead = 0; ReleaseReads = 0
         FailUploadNumber = 0; UploadCount = 0; Assets = @{}; CorruptUpload = $false; DropUploads = $false
-        HttpStatus = 404; HttpCalls = 0; PublishedPackage = ''; FailApi = $false
+        HttpStatus = 404; HttpCalls = 0; PublishedPackage = ''; FailApi = $false; ExpectedPackageId = 'spdx.expressions'
         Calls = [Collections.Generic.List[object]]::new()
     }
 }
@@ -125,7 +128,7 @@ function gh {
             return
         }
         switch -Regex ($call[1]) {
-            '\Arepos/DmitryGaravsky/Spdx.Expressions/commits/refs/tags/(v[0-9a-z.-]+)\z' {
+            '\Arepos/DmitryGaravsky/Spdx.Expressions/commits/refs/tags/((?:compliance-)?v[0-9a-z.-]+)\z' {
                 if (-not $releaseTestState.TagExists) {
                     $global:LASTEXITCODE = 1
                     return
@@ -135,7 +138,7 @@ function gh {
             '\Arepos/DmitryGaravsky/Spdx.Expressions/compare/[0-9a-f]{40}\.\.\.main\z' {
                 return (@{ status = $releaseTestState.MainStatus; merge_base_commit = @{ sha = $releaseTestState.MergeBase } } | ConvertTo-Json)
             }
-            '\Arepos/DmitryGaravsky/Spdx.Expressions/releases/tags/(v[0-9a-z.-]+)\z' {
+            '\Arepos/DmitryGaravsky/Spdx.Expressions/releases/tags/((?:compliance-)?v[0-9a-z.-]+)\z' {
                 if (-not $releaseTestState.Exists) {
                     $global:LASTEXITCODE = 1
                     return
@@ -187,7 +190,8 @@ function gh {
 function Invoke-WebRequest {
     param([string]$Uri, [string]$OutFile, [int]$TimeoutSec)
     $releaseTestState.HttpCalls++
-    Assert ($Uri -ceq 'https://api.nuget.org/v3-flatcontainer/spdx.expressions/1.2.3-preview.1/spdx.expressions.1.2.3-preview.1.nupkg') 'Unexpected package URL.'
+    $id = $releaseTestState.ExpectedPackageId
+    Assert ($Uri -ceq "https://api.nuget.org/v3-flatcontainer/$id/1.2.3-preview.1/$id.1.2.3-preview.1.nupkg") 'Unexpected package URL.'
     Assert ($TimeoutSec -gt 0 -and $TimeoutSec -le 60) 'Download must have a bounded timeout.'
     if ($releaseTestState.HttpStatus -ne 200) {
         $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]$releaseTestState.HttpStatus)
@@ -369,6 +373,85 @@ try {
     $releaseTestState.PublishedPackage = Join-Path $suite 'changed-payload/Spdx.Expressions.1.2.3-preview.1.nupkg'
     Reject { & $nugetCheck -Version $version -Directory $fixture -Commit $commit } 'bytes differ'
     $completed.Add('Conflicting existing NuGet version fails closed')
+    $target = & "$PSScriptRoot/get-release-target.ps1" -Tag "compliance-v$version"
+    Assert ($target.PackageId -ceq 'Spdx.Compliance' -and $target.Version -ceq $version -and $target.Directory -ceq "artifacts/release/compliance/$version") 'Wrong Compliance release target.'
+    Reject { & $getVersion -Tag 'Compliance-v1.2.3' } 'Release tags'
+    Reject { & $getVersion -Tag 'compliance-v1.2.3/other' } 'Invalid version'
+    $compliance = New-Fixture 'compliance' -PackageId 'Spdx.Compliance'
+    Reset-Mock
+    Reject { & $publisher -Tag "compliance-v$version" -Commit $commit -Directory $fixture } 'exactly'
+    Reject { & $publisher -Tag "v$version" -Commit $commit -Directory $compliance } 'exactly'
+    Assert ($releaseTestState.Calls.Count -eq 0) 'Cross-package assets reached GitHub.'
+    & $publisher -Tag "compliance-v$version" -Commit $commit -Directory $compliance 6>&1 | Out-Null
+    Assert ($releaseTestState.Assets.Count -eq 2 -and $releaseTestState.Assets.ContainsKey("Spdx.Compliance.$version.nupkg")) 'Wrong Compliance release assets.'
+    $releaseTestState.Immutable = $true
+    & $sourceCheck -Tag "compliance-v$version" -Commit $commit | Out-Null
+    $releaseTestState.ExpectedPackageId = 'spdx.compliance'
+    $releaseTestState.HttpStatus = 200
+    $releaseTestState.PublishedPackage = Join-Path $compliance "Spdx.Compliance.$version.nupkg"
+    Assert (& $nugetCheck -PackageId Spdx.Compliance -Version $version -Directory $compliance -Commit $commit) 'Compliance retry did not find its package.'
+    $completed.Add('Compliance tag, package routing, independent assets and publication retry')
+    & {
+        $reuse = Join-Path $PSScriptRoot 'reuse-ci-package.ps1'
+        $repository = 'DmitryGaravsky/Spdx.Expressions'
+        $ciRun = @{ id = 123; head_sha = $commit; head_branch = 'main'; event = 'push'; conclusion = 'success'
+            status = 'completed'; head_repository = @{ full_name = $repository }; run_attempt = 2 }
+        $artifacts = @(@{ name = 'verification-ubuntu-latest-1'; expired = $false }, @{ name = 'development-package-1'; expired = $false })
+        $ciPackage = Join-Path $compliance "Spdx.Compliance.$version.nupkg"
+        $report = @{ status = 'Passed'; version = $version; package = "packages/Spdx.Expressions.$version.nupkg"
+            packageSha256 = (Get-FileHash $package).Hash.ToLowerInvariant()
+            compliancePackage = "packages/Spdx.Compliance.$version.nupkg"; compliancePackageSha256 = (Get-FileHash $ciPackage).Hash.ToLowerInvariant() }
+        function gh {
+            $global:LASTEXITCODE = 0
+            if ($args[0] -eq 'api') {
+                if ($args[-1] -ceq "repos/$repository/actions/workflows/ci.yml/runs?branch=main&head_sha=$commit&status=success&per_page=100") {
+                    return ConvertTo-Json -InputObject @(@{ workflow_runs = @($ciRun) }) -Depth 8
+                }
+                if ($args[-1] -ceq "repos/$repository/actions/runs/123/artifacts?per_page=100") {
+                    return ConvertTo-Json -InputObject @(@{ artifacts = $artifacts }) -Depth 6
+                }
+                throw 'Unexpected CI API request.'
+            }
+            Assert (($args[0..8] -join ' ') -ceq "run download 123 --repo $repository --name development-package-1 --name verification-ubuntu-latest-1") 'Mixed CI run or attempt.'
+            $download = $args[-1]
+            $packages = [IO.Directory]::CreateDirectory("$download/development-package-1/run/packages")
+            Copy-Item -LiteralPath $package, $ciPackage -Destination $packages.FullName
+            $evidence = [IO.Directory]::CreateDirectory("$download/verification-ubuntu-latest-1")
+            $report | ConvertTo-Json | Set-Content "$($evidence.FullName)/latest-verification.json"
+        }
+        function Check-Miss([string]$Tag, [string]$Reason) {
+            $out = Join-Path $suite 'unused-ci-candidate'
+            Assert (-not (& $reuse -Tag $Tag -Commit $commit -OutputDirectory $out 3>$null)) $Reason
+            Assert (-not (Test-Path -LiteralPath $out)) 'Fallback left release files behind.'
+            $completed.Add($Reason)
+        }
+        foreach ($tag in @("v$version", "compliance-v$version")) {
+            $out = Join-Path $suite "reuse-$tag"
+            Assert (& $reuse -Tag $tag -Commit $commit -OutputDirectory $out) 'Expected a verified match.'
+            $expected = if ($tag.StartsWith('v')) { $package } else { $ciPackage }
+            $copy = Join-Path $out ([IO.Path]::GetFileName($expected))
+            Assert ((Get-FileHash $copy).Hash -ceq (Get-FileHash $expected).Hash) 'CI package bytes changed.'
+            $completed.Add("Reuse verified Linux package for $tag across a partial CI rerun")
+        }
+        foreach ($case in @(@('event','pull_request'), @('head_branch','other'), @('head_sha',('a' * 40)), @('conclusion','failure'))) {
+            $key, $value = $case
+            $original = $ciRun[$key]
+            $ciRun[$key] = $value
+            Check-Miss "v$version" "Ignore CI run with $key=$value"
+            $ciRun[$key] = $original
+        }
+        $ciRun.head_repository.full_name = 'fork/Spdx.Expressions'
+        Check-Miss "v$version" 'Ignore fork CI artifacts'
+        $ciRun.head_repository.full_name = $repository
+        $artifacts[0].expired = $true
+        Check-Miss "v$version" 'Rebuild when Linux evidence expired'
+        $artifacts[0].expired = $false
+        Check-Miss 'compliance-v0.1.1' 'Rebuild when the CI version differs from the tag'
+        $report.compliancePackageSha256 = '0' * 64
+        Check-Miss "compliance-v$version" 'Rebuild when package bytes differ from the CI SHA-256'
+        $report.status = 'Failed'
+        Check-Miss "v$version" 'Rebuild when Linux verification failed'
+    }
     $result.status = 'Passed'
 }
 finally {

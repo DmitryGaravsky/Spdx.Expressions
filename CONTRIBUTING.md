@@ -15,7 +15,7 @@ selects nuget.org rather than inheriting machine-specific feeds.
 
 The pipeline tests release scripts without network or credentials, restores,
 runs Debug/Release NUnit tests under process timeouts, checks
-C# whitespace, packs Release and tests the actual package with an isolated external consumer.
+C# whitespace, packs both libraries in Release and runs an isolated consumer against each nupkg.
 See [Testing](docs/testing.md) for focused commands and [CI](docs/ci.md) for the hosted matrix.
 
 ## Changes and review

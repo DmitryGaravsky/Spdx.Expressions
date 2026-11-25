@@ -2,43 +2,63 @@
 
 The repository is [DmitryGaravsky/Spdx.Expressions](https://github.com/DmitryGaravsky/Spdx.Expressions).
 Shared package metadata in Directory.Build.props records this project/repository URL,
-Git repository type, MIT license and author Dmitry Garavsky. The package includes README,
-LICENSE, XML documentation and separate upstream SPDX data/notices. Relative README links
-are expanded to repository URLs during packing; see [Architecture](architecture.md) for
+Git repository type, MIT license and author Dmitry Garavsky. Both packages include README,
+LICENSE and XML documentation. Spdx.Expressions also includes upstream SPDX data and notices.
+Its relative README links are expanded to repository URLs during packing. See [Architecture](architecture.md) for
 revision selection. Ensure the referenced revision and documentation are published before
 distributing the package. The real package check verifies the generated README contents.
 The package does not contain the repository guides or runnable example sources.
 The implementation's MIT declaration does not replace the dataset's attribution.
 
-Only the library is packable. The source version is 1.1.1. The SDK version and
+Each library has its own release tag, version and output directory.
+
+| Package | Example tag | Prepared release directory |
+| --- | --- | --- |
+| Spdx.Expressions | `v1.1.1` | `artifacts/release/1.1.1` |
+| Spdx.Compliance | `compliance-v0.1.0` | `artifacts/release/compliance/0.1.0` |
+
+Development builds read the Expressions version from Directory.Build.props and the
+Compliance version from Spdx.Compliance.csproj. The SDK version and
 roll-forward policy are declared in global.json; changing either requires renewed
 verification. CI installs the declared SDK.
 
 ## Local preparation
+
+In the release PR, align installation commands, package READMEs, API guides and
+working statuses with the version being packed. Use the versioned NuGet page for
+availability and the GitHub release for the distributed archive and SHA256SUMS.
+Record rehearsal results with the date and artifact tested.
 
 ```powershell
 ./eng/verify.ps1
 ./eng/test-release.ps1
 ./eng/prepare-release.ps1 -Tag v1.1.1
 ./eng/verify-release-assets.ps1 -Version 1.1.1 -Directory ./artifacts/release/1.1.1
+./eng/prepare-release.ps1 -Tag compliance-v0.1.0
+./eng/verify-release-assets.ps1 -PackageId Spdx.Compliance -Version 0.1.0 -Directory ./artifacts/release/compliance/0.1.0
 ```
 
 Verification includes offline release-script tests with synthetic packages and substituted
 GitHub/HTTP commands: no network, credentials or publication. Both verify.ps1 and
-prepare-release.ps1 accept an optional RestoreSource for a local feed.
+prepare-release.ps1 accept an optional RestoreSource for a local feed. For a Compliance
+release the smoke test restores the candidate by exact version from its own local feed.
+It resolves Spdx.Expressions and NuGet.Versioning from NuGet.org by default, or from
+RestoreSource when supplied. Use `-DependencySource <feed>` to select a separate feed
+containing the intended dependency packages. Ensure these dependency versions are
+available on NuGet.org before publishing Compliance.
 
-Preparation validates the tag, runs the complete pipeline with that version, then copies
-the exact tested nupkg into a new release directory. Version is applied to restore,
-Debug/Release builds and packing; the isolated consumer checks the loaded assembly's
-informational version against the nuspec. Its catalogue checks cover both loader
-overloads and compare validation with caller-selected and embedded data. The package
+Preparation validates the tag, runs the complete pipeline for the selected library, then copies
+the exact tested nupkg into a new release directory. The tag applies to the selected
+library across restore, Debug/Release builds and packing. Its isolated consumer checks
+the loaded assembly's informational version. The Expressions catalogue checks cover both
+loader overloads and compare validation with caller-selected and embedded data. The Expressions package
 ships the pinned embedded pair. Loader inputs for other snapshots are supplied by callers.
 Preparation needs no Git tag, remote, credentials or network when a complete local feed
 is supplied. It does not change Git state or publish.
 
 The release directory contains exactly:
 
-- Spdx.Expressions.&lt;version&gt;.nupkg
+- `<package-id>.<version>.nupkg` for the library selected by the tag
 - SHA256SUMS, containing the lowercase SHA-256 and package filename
 
 Existing output directories are rejected before verification. Preserve prepared files
@@ -50,15 +70,13 @@ OutputDirectory arguments follow the caller's PowerShell location.
 
 ## Version policy
 
-The [1.x compatibility policy](compatibility.md) defines stable API contracts,
+The [Expressions 1.x compatibility policy](compatibility.md) defines stable API contracts,
 additive changes, diagnostic/enum evolution and embedded catalogue updates.
 The 1.0.0 baseline includes the catalogue loader, traversal and canonical-casing APIs.
-The release tag supplies the final version to all verification and packaging steps,
-overriding the source version in Directory.Build.props. Local preparation never publishes.
-
-Tags are v followed by three canonical numeric components, optionally a lowercase
-SemVer prerelease suffix: v1.2.3 or v1.2.3-preview.1. Leading zeroes in numeric components
-or numeric prerelease identifiers, uppercase suffixes and build metadata are rejected.
+Both tag prefixes accept three canonical numeric components and an optional lowercase
+SemVer prerelease suffix, for example `v1.2.3` or `compliance-v1.2.3-preview.1`.
+Leading zeroes in numeric components or numeric prerelease identifiers, uppercase suffixes
+and build metadata are rejected.
 The tag controls both package and assembly informational versions. The GitHub release's
 pre-release checkbox must match the tag: checked for a suffix such as -preview.1,
 unchecked for a stable version. Classification mismatches stop publication.
@@ -68,7 +86,7 @@ unchecked for a stable version. Classification mismatches stop publication.
 1. Commit and push the reviewed changes to main and check the build CI results. The
    selected commit must contain this release workflow; existing old tags retain their
    old workflow. Do not move or reuse a published version tag.
-2. Open **Releases → Draft a new release**. Create a new tag such as v1.1.1 targeting
+2. Open **Releases → Draft a new release**. Create a tag for the desired package targeting
    main, or select an existing version tag whose commit belongs to main.
 3. Enter the release title and description. Select **This is a pre-release** only for
    a prerelease version. Leave the asset list empty; the workflow supplies both files.
@@ -94,9 +112,14 @@ an unsuccessful run. Its existence alone is not evidence of a successful NuGet p
 Publish GitHub release ──→ validate tag, event commit, main ancestry and release state
                                                 │
                                                 ▼
-                               Windows / Linux / macOS verification
-                                                │
-                                                ▼
+                               find successful main CI at this SHA
+                                  │                       │
+                           matching package          no suitable package
+                                  │                       │
+                           verify CI checksum       build and verify on
+                           and nuspec commit        Windows / Linux / macOS
+                                  └───────────┬───────────┘
+                                              ▼
                               retain verified Linux package + SHA256SUMS
                                                 │
                                                 ▼
@@ -114,12 +137,20 @@ to that SHA, and the commit must be an ancestor of main or main itself. These ch
 before building, before publication and when attaching files. Repository tag protections
 remain necessary: API checks cannot atomically lock a tag against concurrent changes.
 
-All three verification jobs must succeed. Each runs local preparation and an actual
-isolated package consumer. Only the retained Linux artifact is published; publication
-jobs download and validate it without rebuilding. Logs are retained even on failure;
-release artifacts remain available for 30 days.
+The release looks for a completed, successful `ci.yml` push or manual run on this
+repository's `main` at the release SHA. That CI matrix covers Windows, Linux and macOS.
+The Linux package and verification report must come from the same run and attempt.
+The release checks the requested filename, SHA-256 recorded by CI, nuspec ID, version,
+repository commit and required contents. It retains the original archive bytes with
+their checksum. If lookup fails or candidates are absent, expired or fail validation,
+the release builds from the tagged commit and requires all three verification jobs to pass.
 
-Verification has contents: read. NuGet uses the nuget environment and id-token: write
+Both routes run the Compliance consumer with the release candidate and dependencies
+from NuGet.org. Consumer failure blocks publication. Publication jobs download and
+validate the retained Linux package and SHA256SUMS. Release artifacts remain available
+for 30 days.
+
+CI artifact discovery uses `actions: read` and `contents: read`. NuGet uses the nuget environment and id-token: write
 for [trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
 Only the attachment job has contents: write. Checkout does not persist credentials.
 Actions are pinned to full upstream commit SHAs; [Dependabot](../.github/dependabot.yml)
@@ -132,13 +163,13 @@ These settings are external to the source tree; changing workflow files does not
 
 | Location | Required or recommended configuration |
 | --- | --- |
-| Settings → Rules → Rulesets | Create an active tag ruleset for v* restricting updates and deletions, with no routine bypass. If additional writers are invited, restrict tag creation to release maintainers in a separate ruleset so its creation bypass does not permit rewriting existing tags. |
+| Settings → Rules → Rulesets | Cover both tag patterns `v*` and `compliance-v*` with restrictions on updates and deletions, with no routine bypass. If additional writers are invited, restrict tag creation to release maintainers in a separate ruleset so its creation bypass does not permit rewriting existing tags. |
 | Settings → Branches → main protection | Require Verify (ubuntu-latest) and Verify (windows-latest), and apply the protection to administrators. Keep force pushes/deletion disabled. macOS is not a required PR check because it runs on main/manual CI and releases. Independent review requires another maintainer; do not require an unavailable reviewer in a solo repository. |
 | Settings → Actions → General | Keep default workflow permissions read-only and PR approval by Actions disabled. Require full SHA pinning; allow the used actions/* and NuGet/login actions if limiting the allowed set. Keep approval for all external contributors' PR runs. |
-| Settings → Environments → nuget | Keep a Tag rule v*, not a Branch rule, and NUGET_USER as an environment variable containing the NuGet profile name. A required reviewer is optional protection against accidental publication. For a solo reviewer, do not enable Prevent self-review; it would block their own releases. Disable administrator bypass if approval is intended to be mandatory. |
+| Settings → Environments → nuget | Allow Tag rules `v*` and `compliance-v*`. Set NUGET_USER to the NuGet profile name. A required reviewer is optional protection against accidental publication. For a solo reviewer, allow self-review. Disable administrator bypass if approval is intended to be mandatory. |
 | Settings → Security features | Keep secret scanning and push protection enabled. Enable Dependabot alerts and security updates; version updates are configured in dependabot.yml. |
 | Settings → Releases | Keep Immutable releases disabled for this UI-first workflow. GitHub cannot attach files after an immutable release is published. An immutable-release process must upload files before publishing the release and needs a different trigger. |
-| NuGet.org → Trusted Publishing | Restrict the policy to owner DmitryGaravsky, repository Spdx.Expressions, workflow release.yml, environment nuget and package pattern Spdx.Expressions. Retain only the publishing scopes needed for this package; no stored API key is required. |
+| NuGet.org → Trusted Publishing | Use the exact package IDs `Spdx.Expressions` and `Spdx.Compliance`, owner `DmitryGaravsky`, repository `Spdx.Expressions`, workflow `release.yml` and environment `nuget`. The scope **Push new packages and package versions** covers both initial and subsequent releases. |
 | GitHub and NuGet account security | Confirm appropriate sign-in protection and review any existing long-lived keys or integrations separately. Workflow success does not establish their absence or scope. |
 
 Do not run publish-github-release.ps1 locally to publish implicitly. Its -CheckOnly mode

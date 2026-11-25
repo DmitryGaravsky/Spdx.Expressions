@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../eng/Tests.props" />
+  <ItemGroup>
+    <ProjectReference Include="../Spdx.Compliance/Spdx.Compliance.csproj" />
+  </ItemGroup>
+</Project>
